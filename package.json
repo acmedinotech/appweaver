@@ -1,0 +1,24 @@
+{
+  "name": "@acmedinotech/smartcontainer",
+  "version": "1.0.0-alpha",
+  "description": "SmartContainer is a declarative approach to defining, managing, and retrieving services for applications of any size. Inspired by Apache Felix & the OSGi framework spec.",
+  "main": "dist/index.mjs",
+  "exports": {
+    ".": "./dist/index.mjs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "typecheck": "tsc --noEmit",
+    "build": "esbuild src/index.ts --bundle --outfile=dist/index.mjs --platform=browser --target=es2020 --format=esm --tsconfig=tsconfig.json"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "esbuild": "^0.25.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.2"
+  }
+}

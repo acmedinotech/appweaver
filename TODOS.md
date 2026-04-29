@@ -1,0 +1,1 @@
+- [ ] support CJS as well as ESM? https://stackoverflow.com/a/75348391/2698459
