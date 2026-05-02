@@ -6,8 +6,8 @@ let classNumber = 0;
 const _classToDecorators: Record<symbol, [string, any][]> = {};
 
 /**
- * Attach static property holding GUID if not present.
- * @param clazz 
+ * @param clazz Either a constructor function or a class. If a class is provided, the prototype is
+ * used to store the GUID.
  * @returns 
  */
 const injectGuid = (clazz: any) => {
@@ -21,10 +21,7 @@ const injectGuid = (clazz: any) => {
 
 export const getGuid = (clazz: any) => (clazz.prototype ?? clazz)[KEY_GUID] ?? null;
 
-export const setAndGetGuid = (clazz: any) => {
-    injectGuid(clazz);
-    return getGuid(clazz);
-}
+export const setAndGetGuid = (clazz: any) => getGuid(injectGuid(clazz))
 
 const _decoratorToClassses: Record<string, [symbol, any][]> = {}
 export const registerClassDecorator = (decorator: string, clazz: any, metadata: any) => {

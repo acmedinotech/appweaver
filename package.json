@@ -3,13 +3,14 @@
   "version": "1.0.0-alpha",
   "description": "SmartContainer is a declarative approach to defining, managing, and retrieving services for applications of any size. Inspired by Apache Felix & the OSGi framework spec.",
   "main": "dist/index.mjs",
+  "module": "dist/index.js",
   "exports": {
     ".": "./dist/index.mjs"
   },
   "scripts": {
     "test": "jest",
     "test:watch": "jest --watch",
-    "typecheck": "tsc --noEmit",
+    "lint:types": "tsc --noEmit",
     "build": "esbuild src/index.ts --bundle --outfile=dist/index.mjs --platform=browser --target=es2020 --format=esm --tsconfig=tsconfig.json"
   },
   "keywords": [],
@@ -23,6 +24,7 @@
     "jest": "^30.3.0",
     "ts-jest": "^29.4.9",
     "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
     "typescript": "^6.0.2"
   }
 }

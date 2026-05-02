@@ -6,6 +6,10 @@
     }
   },
   "compilerOptions": {
+    "esModuleInterop": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
@@ -13,13 +17,16 @@
     "types": ["node", "jest"],
     "strict": true,
     "skipLibCheck": true,
-    "noEmit": true,
+    "noEmit": false,
     "experimentalDecorators": true,
     "useDefineForClassFields": false,
     "isolatedModules": true,
     "resolveJsonModule": true,
-    "verbatimModuleSyntax": true
+    "verbatimModuleSyntax": true,
+    "allowJs": true,
+    "rootDir": "./src",
+    "outDir": "./dist"
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+  "exclude": ["node_modules", "dist"],
 }

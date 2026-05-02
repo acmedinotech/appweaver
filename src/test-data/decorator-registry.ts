@@ -46,7 +46,7 @@ export class TestClass {
     }
 }
 
-// @Dec1Class({
-//     name: 'TestClass2',
-// })
-// export class TestClass2 {}
+@Dec1Class({
+    name: 'TestClass2',
+})
+export class TestClass2 {}
