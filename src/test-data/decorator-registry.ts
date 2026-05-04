@@ -10,7 +10,6 @@ const Dec1Class = (metadata: any) => {
 const Dec2Property = (metadata: any) => {
     return (target: any, property: string) => {
         registerPropertyDecorator('Dec2Property', target, property, metadata);
-        return target;
     }
 }
 
