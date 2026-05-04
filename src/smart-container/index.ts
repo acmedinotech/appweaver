@@ -1,18 +1,18 @@
+import EventEmitter from "events";
 import { getClassesForDecorator, getDecoratedClassObject, type ClassDecoratorRecord } from "../decorator-registry";
 import { getServiceMetadata, normalizeServiceMetadata, SVC_PRIORITY_DEFAULT } from "./decorators";
 import type { ServiceFilter, ServiceFilterComplex, ServiceMetadata, ServiceRecord } from "./types.ts";
-
-export const asyncForEach = async (arr: any[], callback: (...args:any[]) => Promise<void>) => {
-    for (const item of arr) {
-        await callback(item);
-    }
-}
 
 export type BootServiceDeferred = {
     metadata: ServiceMetadata;
     lastInjectorCount: number;
     injector: () => number;
     activator: () => Promise<void>;
+}
+
+export enum EventBusTopics {
+    SERVICE_BOOTED = 'serviceBooted',
+    SERVICE_ERROR = 'serviceError',
 }
 
 const _singletons: Record<string, ServiceRecord> = {};
@@ -36,8 +36,8 @@ export const filterServiceComplex = ([id, svc]: [string, ServiceRecord], filter:
 export const filterServices = (services: Record<string, ServiceRecord>, filter: ServiceFilter) => {
     if (typeof filter === 'string') {
         const svc = services[filter] ?? _singletons[filter];
-        if (svc) { return [svc.service]; }
-        return []
+        // console.log('>>> filterServices', {filter, svc, svcKeys: Object.keys(services)}, );
+        return svc?.service;
     }
 
     const {cardinality} = filter;
@@ -46,6 +46,7 @@ export const filterServices = (services: Record<string, ServiceRecord>, filter: 
         .sort((a, b) => (a[1].metadata.priority??SVC_PRIORITY_DEFAULT) - (b[1].metadata.priority??SVC_PRIORITY_DEFAULT))
         .map((ele) => ele[1].service);
     
+    // console.log('>>> filterServices', Object.keys(services), {cardinality, filter, found});
     switch (cardinality) {
         case '0..1':
             return found[0];
@@ -81,7 +82,7 @@ export class SmartContainer {
     }
 
     getService<T>(id: string) {
-        return (_singletons[id] ?? this._services[id]) as T;
+        return (_singletons[id]?.service ?? this._services[id]?.service) as T;
     }
 
     findServices(filter: ServiceFilter) {
@@ -94,11 +95,12 @@ export class SmartContainer {
     protected dependencyGraph: Record<string, InjectDependency[]> = {};
 
     protected resolveDependencies(service: any, dependencies: InjectDependency[]): InjectDependency[] {
+        // console.log('>>> resolveDependencies', service, dependencies);
         const unresolvedDependencies: typeof dependencies = [];
         for (const [memberType, memberKey, filter] of dependencies) {
             // console.log('💜 resolveDependencies', memberType, memberKey, filter);
             const queryResults = this.findServices(filter);
-            // console.log('>>> queryResults', queryResults);
+            // console.log('>>> queryResults', {memberType, memberKey, filter}, queryResults);
             if (!queryResults) {
                 unresolvedDependencies.push([memberType, memberKey, filter]);
             } else {
@@ -118,8 +120,6 @@ export class SmartContainer {
         // @todo apply enabled
         // @todo map interfaces to services
         
-        // console.log('🟢 Annotated service', guid, cls,metadata);
-
         let status = 'defined';
         let error: any = null;
 
@@ -146,25 +146,22 @@ export class SmartContainer {
         ]
         this.dependencyGraph[metadata.id] = dependencies;
 
+        // console.log('>>> dependencies', metadata.id, dependencies);
+
         const me = this;
         const injector = () => {
-            // console.log('>>> injector', metadata.id);
-            const unresolvedDependencies = this.resolveDependencies(service, me.dependencyGraph[metadata.id]);
-            // console.log('>>> unresolvedDependencies', metadata.id,unresolvedDependencies);
+            const unresolvedDependencies = me.resolveDependencies(service, me.dependencyGraph[metadata.id]);
             if (unresolvedDependencies.length === 0) {
                 delete me.dependencyGraph[metadata.id];
-                // console.log(`🟢 resolved ${metadata.id}`);
                 return 0;
             } else {
                 me.dependencyGraph[metadata.id] = unresolvedDependencies;
-                // console.warn(`🟡 pending ${metadata.id}: ${unresolvedDependencies} dependencies`);
                 return unresolvedDependencies.length;
             }
         }
 
         const activator = async () => {
             const activatorMethod = decoratedClassObject.decoratorToMethods.Activate?.[0]?.[0];
-            // console.log('🟢 activatorMethod', activatorMethod);
             if (activatorMethod) {
                 try {
                     await service[activatorMethod]();
@@ -179,7 +176,9 @@ export class SmartContainer {
             }
 
             me.register(metadata.id, service);
+            console.log('ℹ️ bootService: ', status == 'active' ? '✅' : '⚠', metadata.id);
             me.liveServices[metadata.id] = {status, error};
+            // @todo emit event 'serviceBooted'
         }
 
         return {metadata, lastInjectorCount: -1, injector, activator};
@@ -191,11 +190,11 @@ export class SmartContainer {
     }: BootContainerOptions = {}) {
         // @todo load env vars (runModes, enabledBundleIds)
         // @todo remove params.enabledBundleIds and params.runModes if prefixed with '!'
-        console.group('🟢 Booting container');
+        console.group('🟢 SmartContainer: start boot');
 
         const pendingServices: BootServiceDeferred[] = [];
         const annotatedServices = getClassesForDecorator('Service');
-        annotatedServices.forEach(async (decRec) => {
+        for (const decRec of annotatedServices) {
             const {injector, activator} = this.bootService(decRec);
             const lastInjectorCount = injector();
             if (lastInjectorCount == 0) {
@@ -203,21 +202,19 @@ export class SmartContainer {
             } else {
                 pendingServices.push({metadata: decRec[2], lastInjectorCount, injector, activator});
             }
-        });
+        }
 
         await this.resolvePendingServices(pendingServices);
 
+        console.group('🟢 SmartContainer: end boot');
         console.groupEnd();
     }
 
     async resolvePendingServices(pending: BootServiceDeferred[]) {
-        // console.log('🔵 resolvePendingServices', pending);
         const newPending: typeof pending = [];
         for (const deferred of pending) {
             const id = deferred.metadata.id;
-            // console.log('>>> deferred', id, deferred);
             const lastInjectorCount = deferred.injector();
-            // console.log('🔵 resolvePendingServices', {lastInjectorCount});
             if (lastInjectorCount == 0) {
                 await deferred.activator();
             } else if (deferred.lastInjectorCount != lastInjectorCount) {
@@ -227,9 +224,18 @@ export class SmartContainer {
             }
         }
 
-        // console.log('>>> hasPending', newPending.length);
         if (newPending.length > 0) {
             this.resolvePendingServices(newPending);
         }
+    }
+
+    protected eventBus = {
+        container: new EventEmitter(),
+        services: new EventEmitter(),
+    }
+
+    listenOn(bus: keyof typeof this.eventBus, topic: string, listener: (...args: any[]) => void) {
+        this.eventBus[bus].on(topic, listener);
+        return () => this.eventBus[bus].off(topic, listener);
     }
 }

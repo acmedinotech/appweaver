@@ -53,7 +53,6 @@ export const BundleActivator = (metadata: any) => {}
  */
 export const Inject = (filter: ServiceFilter) => {
     return (target: any, memberKey: string | symbol, descriptor?: PropertyDescriptor) => {
-        console.log('🟢 Inject', target, memberKey, descriptor);
         if (descriptor) {
             registerMethodDecorator('Inject', target, memberKey as string, filter);
         } else {
@@ -70,7 +69,6 @@ export const Inject = (filter: ServiceFilter) => {
  */
 export const Activate = (metadata: any = undefined) => {
     return (target: any, propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
-        console.log('🟢 Activate', target, propertyKey, descriptor);
         registerMethodDecorator('Activate', target, propertyKey as string, metadata);
     }
 }

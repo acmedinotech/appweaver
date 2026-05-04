@@ -13,18 +13,16 @@ export class DummyServiceA {
     @Activate()
     activate() {
         this.activated = 1;
-        console.log('DummServiceA.activate');
+        console.log('DummyServiceA.activate');
     }
 
     @Deactivate()
     deactivate() {
         this.activated = -1
-        console.log('DummServiceA.deactivate');
+        console.log('DummyServiceA.deactivate');
     }
 
-    // @Inject('DummyServiceB')
-    // setDummyServiceB(dummyServiceB: DummyServiceB) {
-    // }
+
 }
 
 @Service({
@@ -32,6 +30,12 @@ export class DummyServiceA {
     bundleId: 'test-data.bundle-a',
 })
 export class DummyServiceB {
+    initialized = 0
+    @Activate()
+    initialize() {
+        this.initialized = 1;
+        console.log('DummyServiceB.activate');
+    }
 }
 
 export const autowire = [DummyServiceA, DummyServiceB];
