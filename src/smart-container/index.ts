@@ -1,7 +1,7 @@
 import EventEmitter from "events";
-import { getClassesForDecorator, getDecoratedClassObject, type ClassDecoratorRecord } from "../decorator-registry";
+import { getClassesForDecorator, getDecoratedClassObject, type ClassDecoratorRecord, type DecoratedClassObject } from "../decorator-registry";
 import { SVC_LIFECYCLE_DEFAULT, SVC_PRIORITY_DEFAULT } from "./decorators";
-import { SCEnvVars, type ServiceFilter, type ServiceFilterComplex, type ServiceMetadata, type ServiceRecord } from "./types";
+import { SCEnvVars, type MetadataTransformer, type ServiceFilter, type ServiceFilterComplex, type ServiceMetadata, type ServiceRecord } from "./types";
 
 export type BootServiceDeferred = {
     metadata: ServiceMetadata;
@@ -42,7 +42,7 @@ export const filterServiceComplex = ([id, svc]: [string, ServiceRecord], filter:
  * @param filter 
  * @returns 
  */
-export const filterServices = (services: Record<string, ServiceRecord>, filter: ServiceFilter) => {
+export const filterServices = (services: Record<string, ServiceRecord>, filter: ServiceFilter): any[]|any|undefined => {
     if (typeof filter === 'string') {
         const svc = services[filter] ?? _singletons[filter];
         return svc?.service;
@@ -76,9 +76,9 @@ export type BootContainerOptions = {
 
 export type InjectDependency = [number, string, ServiceFilter];
 
-export const parseRuleStringToMap = (ruleString: string): Record<string, boolean> => {
+export const parseRuleStringToMap = (ruleString: string, initialMap: Record<string, boolean> = {}): Record<string, boolean> => {
     const rules = ruleString.split(',');
-    const map: Record<string, boolean> = {};
+    const map: Record<string, boolean> = {...initialMap};
     for (const rule of rules) {
         if (rule.startsWith('!')) {
             map[rule.slice(1)] = false;
@@ -91,11 +91,33 @@ export const parseRuleStringToMap = (ruleString: string): Record<string, boolean
 
 export const getConfigFromEnv = (env: Record<string, string>): BootContainerOptions => {
     const config: BootContainerOptions = {
-        runModes: parseRuleStringToMap(env[SCEnvVars.RUN_MODES] ?? ''),
+        runModes: parseRuleStringToMap(env[SCEnvVars.RUN_MODES] ?? '', {default: true}),
         bundleIds: parseRuleStringToMap(env[SCEnvVars.BUNDLE_IDS] ?? ''),
         nodeEnv: env['NODE_ENV'] ?? 'development',
     }
     return config;
+}
+
+const _metadataTransformers: Record<string, MetadataTransformer> = {};
+
+/**
+ * Allows transformation of @Service metadata via other class decorators. For instance,
+ * @Controller services will add `http.Controller` to the `interfaces` array.
+ * @param decorator 
+ * @param transformer 
+ */
+export const addMetadataTransformer = (decorator: string, transformer: MetadataTransformer) => {
+    _metadataTransformers[decorator] = transformer;
+}
+
+export const applyMetadataTransformers = (_metadata: ServiceMetadata, decoratedClassObject: DecoratedClassObject) => {
+    let metadata = {..._metadata};
+    for (const decorator of Object.keys(decoratedClassObject.class)) {
+        if (_metadataTransformers[decorator]) {
+            metadata = _metadataTransformers[decorator](metadata);
+        }
+    }
+    return metadata;
 }
 
 export class SmartContainer {
@@ -188,23 +210,24 @@ export class SmartContainer {
 
     protected postBootServices: {service: any, method: string, priority: number}[] = [];
 
-    bootService([guid, cls, metadata]: ClassDecoratorRecord) {
+    bootService([guid, cls, _metadata]: ClassDecoratorRecord) {
         // @todo apply enabled
-        
+
         let status = 'defined';
         let error: any = null;
 
         // @todo work out semantics for singleton/container (might need a singletonLiveServices module var)
-        if (this.getService(metadata.id)) {
+        if (this.getService(_metadata.id)) {
             // console.warn(`🟡 Service ${metadata.id} is already registered`);
             status = 'error';
-            error = `Service ${metadata.id} is already registered`;
-            this.serviceTracker[metadata.id] = {status, error};
-            return {metadata, lastInjectorCount: 0, injector: () => 0, activator: async() => {}};
+            error = `Service ${_metadata.id} is already registered`;
+            this.serviceTracker[_metadata.id] = {status, error};
+            return {metadata: _metadata, lastInjectorCount: 0, injector: () => 0, activator: async() => {}};
         }
 
         const service = new cls();
         const decoratedClassObject = getDecoratedClassObject(guid);
+        const metadata = applyMetadataTransformers(_metadata, decoratedClassObject);
 
         status = 'pending';
         this.serviceTracker[metadata.id] = {status, error};
@@ -242,7 +265,7 @@ export class SmartContainer {
                 status = 'active';
             }
 
-            me.register(metadata.id, service);
+            me.register(metadata.id, service, metadata);
             console.log('ℹ️ bootService: ', status == 'active' ? '✅' : '⚠', metadata.id);
             me.serviceTracker[metadata.id] = {status, error};
 

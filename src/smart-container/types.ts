@@ -41,6 +41,8 @@ export type ServiceMetadata = {
     runModes?: string[];
 }
 
+export type MetadataTransformer = (metadata: ServiceMetadata) => ServiceMetadata;
+
 export type ServiceRecord = {
     service: any;
     metadata: ServiceMetadata;

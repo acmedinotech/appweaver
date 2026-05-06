@@ -12,7 +12,6 @@ describe('class SmartContainer', () => {
     describe('basic DI & activation', () => {
         const container = new SmartContainer({
             bundleIds: { [bundleA.bundleId]: true },
-            runModes: {default: true},
         });
     
         beforeAll(async () => {
@@ -47,7 +46,7 @@ describe('class SmartContainer', () => {
         bundleB.autowire;
         const container = new SmartContainer({
             bundleIds: { [bundleB.bundleId]: true },
-            runModes: { default: true, 'test-active': true},
+            runModes: { 'test-active': true},
         });
 
         beforeAll(async () => {
@@ -86,7 +85,6 @@ describe('class SmartContainer', () => {
         bundleLifecycle.autowire;
         const container = new SmartContainer({
             bundleIds: { [bundleLifecycle.bundleId]: true },
-            runModes: { default: true },
         });
 
         beforeAll(async () => {
