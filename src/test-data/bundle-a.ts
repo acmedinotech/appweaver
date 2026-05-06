@@ -1,8 +1,10 @@
 import { Activate, Deactivate, Inject, Service } from "../smart-container/decorators";
 
+export const bundleId = 'test-data.bundle-a';
+
 @Service({
     id: 'DummyServiceA',
-    bundleId: 'test-data.bundle-a',
+    bundleId,
 })
 export class DummyServiceA {
     activated = 0;
@@ -27,7 +29,7 @@ export class DummyServiceA {
 
 @Service({
     id: 'DummyServiceB',
-    bundleId: 'test-data.bundle-a',
+    bundleId,
 })
 export class DummyServiceB {
     initialized = 0

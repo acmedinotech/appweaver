@@ -1,7 +1,7 @@
 import EventEmitter from "events";
 import { getClassesForDecorator, getDecoratedClassObject, type ClassDecoratorRecord } from "../decorator-registry";
-import { getServiceMetadata, normalizeServiceMetadata, SVC_PRIORITY_DEFAULT } from "./decorators";
-import type { ServiceFilter, ServiceFilterComplex, ServiceMetadata, ServiceRecord } from "./types.ts";
+import { SVC_LIFECYCLE_DEFAULT, SVC_PRIORITY_DEFAULT } from "./decorators";
+import { SCEnvVars, type ServiceFilter, type ServiceFilterComplex, type ServiceMetadata, type ServiceRecord } from "./types";
 
 export type BootServiceDeferred = {
     metadata: ServiceMetadata;
@@ -10,9 +10,18 @@ export type BootServiceDeferred = {
     activator: () => Promise<void>;
 }
 
-export enum EventBusTopics {
-    SERVICE_BOOTED = 'serviceBooted',
-    SERVICE_ERROR = 'serviceError',
+export const normalizeServiceMetadata = (metadata: Partial<ServiceMetadata> = {}): ServiceMetadata => {
+    return {
+        // @todo better default id
+        id: metadata.id ?? new Date().toISOString(),
+        interfaces: [],
+        priority: SVC_PRIORITY_DEFAULT,
+        lifecycle: SVC_LIFECYCLE_DEFAULT,
+        enabled: true,
+        bundleId: '*',
+        runModes: ['default'],
+        ...metadata,
+    }
 }
 
 const _singletons: Record<string, ServiceRecord> = {};
@@ -36,7 +45,6 @@ export const filterServiceComplex = ([id, svc]: [string, ServiceRecord], filter:
 export const filterServices = (services: Record<string, ServiceRecord>, filter: ServiceFilter) => {
     if (typeof filter === 'string') {
         const svc = services[filter] ?? _singletons[filter];
-        // console.log('>>> filterServices', {filter, svc, svcKeys: Object.keys(services)}, );
         return svc?.service;
     }
 
@@ -46,7 +54,6 @@ export const filterServices = (services: Record<string, ServiceRecord>, filter: 
         .sort((a, b) => (a[1].metadata.priority??SVC_PRIORITY_DEFAULT) - (b[1].metadata.priority??SVC_PRIORITY_DEFAULT))
         .map((ele) => ele[1].service);
     
-    // console.log('>>> filterServices', Object.keys(services), {cardinality, filter, found});
     switch (cardinality) {
         case '0..1':
             return found[0];
@@ -61,16 +68,75 @@ export const filterServices = (services: Record<string, ServiceRecord>, filter: 
 }
 
 export type BootContainerOptions = {
+    nodeEnv: string;
     /** If defined, restricts services to the given bundle ids. */
-    enabledBundleIds?: string[];
-    runModes?: string[];
+    bundleIds: Record<string, boolean>;
+    runModes: Record<string, boolean>;
 }
 
 export type InjectDependency = [number, string, ServiceFilter];
 
+export const parseRuleStringToMap = (ruleString: string): Record<string, boolean> => {
+    const rules = ruleString.split(',');
+    const map: Record<string, boolean> = {};
+    for (const rule of rules) {
+        if (rule.startsWith('!')) {
+            map[rule.slice(1)] = false;
+        } else {
+            map[rule] = true;
+        }
+    }
+    return map;
+}
+
+export const getConfigFromEnv = (env: Record<string, string>): BootContainerOptions => {
+    const config: BootContainerOptions = {
+        runModes: parseRuleStringToMap(env[SCEnvVars.RUN_MODES] ?? ''),
+        bundleIds: parseRuleStringToMap(env[SCEnvVars.BUNDLE_IDS] ?? ''),
+        nodeEnv: env['NODE_ENV'] ?? 'development',
+    }
+    return config;
+}
+
 export class SmartContainer {
     protected _services: Record<string, ServiceRecord> = {};
-    
+    protected _config: BootContainerOptions;
+
+    constructor({
+        bundleIds = {},
+        runModes = {},
+    }: Partial<BootContainerOptions> = {}) {
+        this._config = getConfigFromEnv(process.env as Record<string, string>);
+        this._config.bundleIds = { default: true, ...this._config.bundleIds, ...bundleIds };
+        this._config.runModes = { ...this._config.runModes, ...runModes };
+    }
+
+    public isRunModeEnabled(runMode: string|string[]) {
+        const checkModes = Array.isArray(runMode) ? runMode : [runMode];
+        for (const mode of checkModes) {
+            if (this._config.runModes[mode]) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public isBundleIdEnabled(bundleId?: string) {
+        return this._config.bundleIds[bundleId??'*'] ?? this._config.bundleIds['*'] ?? false;
+    }
+
+    public isEnvDev() {
+        return this._config.nodeEnv.startsWith('dev');
+    }
+
+    public isEnvTest() {
+        return this._config.nodeEnv === 'test';
+    }
+
+    public isEnvProd() {
+        return this._config.nodeEnv.startsWith('prod');
+    }
+
     register(id: string, service: any, _metadata: Partial<ServiceMetadata> = {}) {
         // @todo check if service is already registered
         const metadata = normalizeServiceMetadata({id, ..._metadata});
@@ -95,12 +161,9 @@ export class SmartContainer {
     protected dependencyGraph: Record<string, InjectDependency[]> = {};
 
     protected resolveDependencies(service: any, dependencies: InjectDependency[]): InjectDependency[] {
-        // console.log('>>> resolveDependencies', service, dependencies);
         const unresolvedDependencies: typeof dependencies = [];
         for (const [memberType, memberKey, filter] of dependencies) {
-            // console.log('💜 resolveDependencies', memberType, memberKey, filter);
             const queryResults = this.findServices(filter);
-            // console.log('>>> queryResults', {memberType, memberKey, filter}, queryResults);
             if (!queryResults) {
                 unresolvedDependencies.push([memberType, memberKey, filter]);
             } else {
@@ -115,10 +178,7 @@ export class SmartContainer {
     }
 
     bootService([guid, cls, metadata]: ClassDecoratorRecord) {
-        // @todo apply enabledBundleIds
-        // @todo apply runModes
         // @todo apply enabled
-        // @todo map interfaces to services
         
         let status = 'defined';
         let error: any = null;
@@ -184,23 +244,28 @@ export class SmartContainer {
         return {metadata, lastInjectorCount: -1, injector, activator};
     }
 
-    async bootContainer({
-        enabledBundleIds = [],
-        runModes = [],
-    }: BootContainerOptions = {}) {
-        // @todo load env vars (runModes, enabledBundleIds)
-        // @todo remove params.enabledBundleIds and params.runModes if prefixed with '!'
+    async bootContainer() {
         console.group('🟢 SmartContainer: start boot');
 
         const pendingServices: BootServiceDeferred[] = [];
         const annotatedServices = getClassesForDecorator('Service');
         for (const decRec of annotatedServices) {
+            const metadata = normalizeServiceMetadata(decRec[2]);
+            if (!this.isBundleIdEnabled(metadata.bundleId)) {
+                console.log(`🔴`, {message: 'bundleId not enabled', metadata});
+                continue;
+            }
+            if (!this.isRunModeEnabled(metadata.runModes ?? 'default')) {
+                console.log(`🔴`, {message: 'runMode not enabled', metadata});
+                continue;
+            }
+
             const {injector, activator} = this.bootService(decRec);
             const lastInjectorCount = injector();
             if (lastInjectorCount == 0) {
                 await activator();
             } else {
-                pendingServices.push({metadata: decRec[2], lastInjectorCount, injector, activator});
+                pendingServices.push({metadata, lastInjectorCount, injector, activator});
             }
         }
 

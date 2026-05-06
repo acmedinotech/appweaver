@@ -4,16 +4,7 @@ import { KEY_SVC_META, type ServiceFilter, type ServiceMetadata } from "./types"
 export const SVC_PRIORITY_DEFAULT = 0;
 export const SVC_LIFECYCLE_DEFAULT = 'container';
 
-export const normalizeServiceMetadata = (metadata: Partial<ServiceMetadata> = {}): ServiceMetadata => {
-    return {
-        id: metadata.id ?? new Date().toISOString(),
-        interfaces: metadata.interfaces ?? [],
-        priority: metadata.priority ?? SVC_PRIORITY_DEFAULT,
-        lifecycle: metadata.lifecycle ?? SVC_LIFECYCLE_DEFAULT,
-        enabled: metadata.enabled ?? true,
-        runModes: metadata.runModes ?? [],
-    }
-}
+
 
 /**
  * CLASS DECORATOR: Defines the entrypoint for an application.

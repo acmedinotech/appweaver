@@ -2,7 +2,7 @@ import { getClassesForDecorator, getDecoratorsForClass, getMethodDecoratorsForCl
 import { TestClass, TestClass2 } from "../test-data/decorator-registry";
 
 describe('decorator registry', () => {
-    const autowire = [TestClass];
+    const autowire = [TestClass, TestClass2];
 
     it('should get classes for decorator:Dec1Class', () => {
         const decorators = getClassesForDecorator('Dec1Class');

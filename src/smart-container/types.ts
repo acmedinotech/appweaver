@@ -2,7 +2,13 @@ export const SC_ENV_PREFIX = '';
 
 export enum SCEnvVars {
     RUN_MODES = 'RUN_MODES',
-    ENABLED_BUNDLE_IDS = 'ENABLED_BUNDLE_IDS',
+    BUNDLE_IDS = 'BUNDLE_IDS',
+}
+
+export enum EventBusTopics {
+    CONTAINER_CONFIGURED = 'containerConfigured',
+    SERVICE_BOOTED = 'serviceBooted',
+    SERVICE_ERROR = 'serviceError',
 }
 
 export type ServiceFilterComplex = {
