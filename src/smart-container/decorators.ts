@@ -31,13 +31,6 @@ export const getServiceMetadata = (target: any) => {
 }
 
 /**
- * CLASS DECORATOR: Defines a bundle activator for the application.
- * @param metadata 
- * @returns 
- */
-export const BundleActivator = (metadata: any) => {}
-
-/**
  * PROPERTY & METHOD DECORATOR: Injects a service into a property or
  * via a setter method.
  * @param metadata 
@@ -61,6 +54,12 @@ export const Inject = (filter: ServiceFilter) => {
 export const Activate = (metadata: any = undefined) => {
     return (target: any, propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
         registerMethodDecorator('Activate', target, propertyKey as string, metadata);
+    }
+}
+
+export const PostBoot = (metadata: any = undefined) => {
+    return (target: any, propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
+        registerMethodDecorator('PostBoot', target, propertyKey as string, metadata);
     }
 }
 

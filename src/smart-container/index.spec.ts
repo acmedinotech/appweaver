@@ -3,6 +3,7 @@ import { TestClass } from "../test-data/decorator-registry";
 import * as bundleA from "../test-data/bundle-a";
 import { getServiceMetadata } from "./decorators";
 import * as bundleB from "../test-data/bundle-b";
+import * as bundleLifecycle from "../test-data/bundle-lifecycle";
 
 describe('class SmartContainer', () => {
     // root @Service classes need to be processed before bootContainer() is called
@@ -78,6 +79,24 @@ describe('class SmartContainer', () => {
             expect(container.getService('SvcAlwaysEnabled')).toBeDefined();
             expect(container.getService('SvcRunModeEnabled')).toBeDefined();
             expect(container.getService('SvcRunModeDisabled')).toBeUndefined();
+        });
+    });
+    
+    describe('service lifecycle', () => {
+        bundleLifecycle.autowire;
+        const container = new SmartContainer({
+            bundleIds: { [bundleLifecycle.bundleId]: true },
+            runModes: { default: true },
+        });
+
+        beforeAll(async () => {
+            await container.bootContainer();
+        });
+
+        it('executes @PostBoot methods using service priority order', () => {
+            const svc1 = container.getService<bundleLifecycle.PostBoot1>('PostBoot1');
+            const svc2 = container.getService<bundleLifecycle.PostBoot2>('PostBoot2');
+            expect(svc2.bootAt).toBeLessThan(svc1.bootAt);
         });
     });
 });

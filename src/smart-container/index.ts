@@ -51,7 +51,7 @@ export const filterServices = (services: Record<string, ServiceRecord>, filter: 
     const {cardinality} = filter;
     const found: any[] = Object.entries(services)
         .filter((ele) => filterServiceComplex(ele, filter))
-        .sort((a, b) => (a[1].metadata.priority??SVC_PRIORITY_DEFAULT) - (b[1].metadata.priority??SVC_PRIORITY_DEFAULT))
+        .sort((a, b) => (b[1].metadata.priority??SVC_PRIORITY_DEFAULT) - (a[1].metadata.priority??SVC_PRIORITY_DEFAULT))
         .map((ele) => ele[1].service);
     
     switch (cardinality) {
@@ -138,6 +138,11 @@ export class SmartContainer {
     }
 
     register(id: string, service: any, _metadata: Partial<ServiceMetadata> = {}) {
+        if (this.getService(id)) {
+            console.warn(`🟡 Service ${id} is already registered`);
+            return false;
+        }
+
         // @todo check if service is already registered
         const metadata = normalizeServiceMetadata({id, ..._metadata});
         const ptr = metadata.lifecycle === 'singleton' ? _singletons : this._services;
@@ -145,8 +150,12 @@ export class SmartContainer {
             service,
             metadata
         }
+        return true;
     }
 
+    /**
+     * Attempts to get a service by id. Checks for singleton first, then container.
+     */
     getService<T>(id: string) {
         return (_singletons[id]?.service ?? this._services[id]?.service) as T;
     }
@@ -155,9 +164,9 @@ export class SmartContainer {
         return filterServices(this._services, filter);
     }
 
-    protected liveServices: Record<string, {status: string; error: any}> = {}
-
-    protected depCheckCycle = 0;
+    /** Tracks all services in the container. */
+    protected serviceTracker: Record<string, {status: string; error: any}> = {}
+    /** Tracks unresolved dependencies for each service in map. */
     protected dependencyGraph: Record<string, InjectDependency[]> = {};
 
     protected resolveDependencies(service: any, dependencies: InjectDependency[]): InjectDependency[] {
@@ -177,6 +186,8 @@ export class SmartContainer {
         return unresolvedDependencies;
     }
 
+    protected postBootServices: {service: any, method: string, priority: number}[] = [];
+
     bootService([guid, cls, metadata]: ClassDecoratorRecord) {
         // @todo apply enabled
         
@@ -185,28 +196,24 @@ export class SmartContainer {
 
         // @todo work out semantics for singleton/container (might need a singletonLiveServices module var)
         if (this.getService(metadata.id)) {
-            console.warn(`🟡 Service ${metadata.id} is already registered`);
+            // console.warn(`🟡 Service ${metadata.id} is already registered`);
             status = 'error';
-            error = new Error(`Service ${metadata.id} is already registered`);
-            this.liveServices[metadata.id] = {status, error};
+            error = `Service ${metadata.id} is already registered`;
+            this.serviceTracker[metadata.id] = {status, error};
             return {metadata, lastInjectorCount: 0, injector: () => 0, activator: async() => {}};
         }
 
         const service = new cls();
-
-        // @todo detect dependencies
         const decoratedClassObject = getDecoratedClassObject(guid);
 
         status = 'pending';
-        this.liveServices[metadata.id] = {status, error};
+        this.serviceTracker[metadata.id] = {status, error};
 
         const dependencies = [
             ...(decoratedClassObject.decoratorToProps.Inject ?? []).map(([memberKey, filter]) => [0, memberKey, filter] as InjectDependency),
             ...(decoratedClassObject.decoratorToMethods.Inject ?? []).map(([memberKey, filter]) => [1, memberKey, filter] as InjectDependency),
         ]
         this.dependencyGraph[metadata.id] = dependencies;
-
-        // console.log('>>> dependencies', metadata.id, dependencies);
 
         const me = this;
         const injector = () => {
@@ -237,7 +244,11 @@ export class SmartContainer {
 
             me.register(metadata.id, service);
             console.log('ℹ️ bootService: ', status == 'active' ? '✅' : '⚠', metadata.id);
-            me.liveServices[metadata.id] = {status, error};
+            me.serviceTracker[metadata.id] = {status, error};
+
+            if (decoratedClassObject.decoratorToMethods.PostBoot?.[0]) {
+                me.postBootServices.push({service, method: decoratedClassObject.decoratorToMethods.PostBoot[0][0], priority: metadata.priority ?? SVC_PRIORITY_DEFAULT});
+            }
             // @todo emit event 'serviceBooted'
         }
 
@@ -270,9 +281,16 @@ export class SmartContainer {
         }
 
         await this.resolvePendingServices(pendingServices);
-
-        console.group('🟢 SmartContainer: end boot');
+        console.log('🟢 SmartContainer: end boot');
+        await this.execPostBoot();
         console.groupEnd();
+    }
+
+    protected async execPostBoot() {
+        console.log('🟢 SmartContainer: executing @PostBoot methods');
+        for (const {service, method} of this.postBootServices.sort((a, b) => b.priority - a.priority)) {
+            await service[method](this);
+        }
     }
 
     async resolvePendingServices(pending: BootServiceDeferred[]) {
