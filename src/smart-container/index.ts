@@ -114,7 +114,7 @@ export const applyMetadataTransformers = (_metadata: ServiceMetadata, decoratedC
     let metadata = {..._metadata};
     for (const decorator of Object.keys(decoratedClassObject.class)) {
         if (_metadataTransformers[decorator]) {
-            metadata = _metadataTransformers[decorator](metadata);
+            metadata = _metadataTransformers[decorator](metadata, decoratedClassObject.class[decorator]);
         }
     }
     return metadata;
@@ -254,7 +254,7 @@ export class SmartContainer {
             const activatorMethod = decoratedClassObject.decoratorToMethods.Activate?.[0]?.[0];
             if (activatorMethod) {
                 try {
-                    await service[activatorMethod]();
+                    await service[activatorMethod](metadata);
                     status = 'active';
                 } catch (err) {
                     console.error('🔴 Error activating service', metadata.id, err);

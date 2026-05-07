@@ -2,8 +2,17 @@ import { getDecoratedClassObject, getGuid } from "../decorator-registry";
 import { addMetadataTransformer, type SmartContainer } from "../smart-container";
 import { PostBoot, Service, SVC_PRIORITY_DEFAULT } from "../smart-container/decorators";
 import type { MetadataTransformer, ServiceMetadata } from "../smart-container/types";
-import { HttpDecorators } from "./decorators";
+import { HttpDecorators, type ControllerMetadata, type RouteMetadata } from "./decorators";
 
+export const httpServerMetadataTransformer: MetadataTransformer = (metadata: ServiceMetadata, serverMetadata): ServiceMetadata => {
+    return {
+        ...metadata,
+        properties: {
+            ...(metadata.properties ?? {}),
+            [HttpDecorators.SERVER]: serverMetadata,
+        }
+    };
+}
 
 export const httpControllerMetadataTransformer: MetadataTransformer = (metadata: ServiceMetadata): ServiceMetadata => {
     return {
@@ -12,7 +21,17 @@ export const httpControllerMetadataTransformer: MetadataTransformer = (metadata:
     };
 }
 
-addMetadataTransformer( HttpDecorators.CONTROLLER, httpControllerMetadataTransformer);
+addMetadataTransformer(HttpDecorators.SERVER, httpServerMetadataTransformer);
+addMetadataTransformer(HttpDecorators.CONTROLLER, httpControllerMetadataTransformer);
+
+export type HttpRequestHandler<Req = Request, Res = Response, NextFn = (undefined | (() => void))> = (request: Req, response: Res, next: NextFn) => void;
+
+export type ControllerAggregate = {
+    controller: any;
+    controllerMetadata: ControllerMetadata
+    routes: {method: string, metadata: RouteMetadata}[];
+    middleware: {method: string, metadata: RouteMetadata}[];
+}
 
 /**
  * Base class for all HTTP services. This collects the services for all active @Controller
@@ -25,12 +44,16 @@ export class BaseHttpService {
         BaseHttpService.gatherControllers(container);
     }
 
+    mountServer(container: SmartContainer, aggregate: ControllerAggregate[]) {
+        throw new Error('not-implemented');
+    }
+
     /**
      * For every @Controller service, gather the @Route & @Middleware methods in priority order.
      * @param container 
      * @returns 
      */
-    static gatherControllers(container: SmartContainer) {
+    static gatherControllers(container: SmartContainer): ControllerAggregate[] {
         const controllers = container.findServices({
             interfaces: [HttpDecorators.CONTROLLER],
             cardinality: '0..n',
@@ -52,7 +75,8 @@ export class BaseHttpService {
                     return {method: cur[0], metadata: cur[1]}
                 });
             return {
-                controller: _allDecorators.class[HttpDecorators.CONTROLLER],
+                controller,
+                controllerMetadata: _allDecorators.class[HttpDecorators.CONTROLLER],
                 routes,
                 middleware
             }

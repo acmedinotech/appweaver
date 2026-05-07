@@ -39,9 +39,10 @@ export type ServiceMetadata = {
     lifecycle?: 'singleton' | 'container' | 'transient';
     enabled?: boolean;
     runModes?: string[];
+    properties?: Record<string, any>;
 }
 
-export type MetadataTransformer = (metadata: ServiceMetadata) => ServiceMetadata;
+export type MetadataTransformer = (serviceMetadata: ServiceMetadata, decoratorMetadata: any) => ServiceMetadata;
 
 export type ServiceRecord = {
     service: any;

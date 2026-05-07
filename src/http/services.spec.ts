@@ -90,8 +90,8 @@ describe('http/services: class BaseHttpService', () => {
     it('should find 2 controllers in priority order', () => {
         const collectedControllers = BaseHttpService.gatherControllers(container);
         expect(collectedControllers).toHaveLength(2);
-        expect(collectedControllers[0].controller.rootPath).toBe('/test2');
-        expect(collectedControllers[1].controller.rootPath).toBe('/test');
+        expect(collectedControllers[0].controllerMetadata.rootPath).toBe('/test2');
+        expect(collectedControllers[1].controllerMetadata.rootPath).toBe('/test');
     });
 
     it('should sort routes in priority order', () => {

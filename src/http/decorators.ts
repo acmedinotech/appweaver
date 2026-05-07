@@ -20,6 +20,8 @@ export const Server = (metadata: ServerMetadata = {port: HTTP_SERVER_PORT}) => {
 
 export type ControllerMetadata = {
     rootPath?: string;
+    /** If true, creates/gets a sub-app for this controller at the given root path. */
+    isSubApp?: boolean;
 }
 
 export const Controller = (metadata: ControllerMetadata = {
@@ -31,10 +33,11 @@ export const Controller = (metadata: ControllerMetadata = {
 }
 
 export type RouteMetadata = {
-    path?: string;
+    path?: string | RegExp;
+    paths?: (string | RegExp)[];
     priority?: number;
     methods?: string[];
-    enabled?: boolean;
+    disabled?: boolean;
 }
 
 export const Middleware = (metadata: RouteMetadata) => {
