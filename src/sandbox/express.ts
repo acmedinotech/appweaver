@@ -28,7 +28,6 @@ const debugRequestHandler: express.RequestHandler = (req, res) => {
     bundleId: 'express'
 })
 @Server({
-    // @todo expose metadata to the server class
     port: 3001
 })
 export class ExpressServer extends BaseHttpService {

@@ -1,7 +1,7 @@
 {
-  "name": "@acmedinotech/smartcontainer",
+  "name": "@acmedinotech/appstitch",
   "version": "1.0.0-alpha",
-  "description": "SmartContainer is a declarative approach to defining, managing, and retrieving services for applications of any size. Inspired by Apache Felix & the OSGi framework spec.",
+  "description": "AppStich is an application orchestration framework powered by decorators. It allows modular, auto-wired application composition. Inspired by Apache Felix & the OSGi framework spec.",
   "main": "dist/index.mjs",
   "module": "dist/index.js",
   "exports": {
@@ -15,7 +15,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "BSD-3-Clause",
   "type": "module",
   "devDependencies": {
     "@types/express": "^5.0.6",
