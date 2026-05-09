@@ -1,4 +1,3 @@
-import EventEmitter from "events";
 import { getClassesForDecorator, getDecoratedClassObject, type ClassDecoratorRecord, type DecoratedClassObject } from "../decorator-registry";
 import { SVC_LIFECYCLE_DEFAULT, SVC_PRIORITY_DEFAULT } from "./decorators";
 import { type MetadataTransformer, type ServiceFilter, type ServiceFilterComplex, type ServiceMetadata, type ServiceRecord } from "./types";
@@ -343,12 +342,12 @@ export class SmartContainer {
     }
 
     protected eventBus = {
-        container: new EventEmitter(),
-        services: new EventEmitter(),
+        // container: new EventEmitter(),
+        // services: new EventEmitter(),
     }
 
     listenOn(bus: keyof typeof this.eventBus, topic: string, listener: (...args: any[]) => void) {
-        this.eventBus[bus].on(topic, listener);
-        return () => this.eventBus[bus].off(topic, listener);
+        // this.eventBus[bus].on(topic, listener);
+        // return () => this.eventBus[bus].off(topic, listener);
     }
 }
