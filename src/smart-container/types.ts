@@ -1,10 +1,3 @@
-export const SC_ENV_PREFIX = '';
-
-export enum SCEnvVars {
-    RUN_MODES = 'RUN_MODES',
-    BUNDLE_IDS = 'BUNDLE_IDS',
-}
-
 export enum EventBusTopics {
     CONTAINER_CONFIGURED = 'containerConfigured',
     SERVICE_BOOTED = 'serviceBooted',
@@ -34,8 +27,8 @@ export const KEY_SVC_META = Symbol('svc.metadata');
 export type ServiceMetadata = {
     id: string;
     bundleId?: string;
-    interfaces?: string[];
     priority?: number;
+    interfaces?: string[];
     lifecycle?: 'singleton' | 'container' | 'transient';
     enabled?: boolean;
     runModes?: string[];

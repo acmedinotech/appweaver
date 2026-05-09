@@ -4,8 +4,6 @@ import { KEY_SVC_META, type ServiceFilter, type ServiceMetadata } from "./types"
 export const SVC_PRIORITY_DEFAULT = 0;
 export const SVC_LIFECYCLE_DEFAULT = 'container';
 
-
-
 /**
  * CLASS DECORATOR: Defines the entrypoint for an application.
  * @param metadata 
@@ -25,6 +23,25 @@ export const Service = (metadata: ServiceMetadata) => {
         return target;
     }
 }
+
+/**
+ * Creates a @Service decorator set with `bundleId`. This is provided as a convenience
+ * for when you have several services spread across multiple files. Example:
+ * 
+ * ```ts
+ * // in a shared file
+ * export const bundleId = `acmedinotech.dummyBundle`;
+ * export const BundledService = makeBundleService(bundleId);
+ * 
+ * // in a service file
+ * @BundledService({ ... })
+ * export class AnyService {}
+ * ```
+ * @param bundleId 
+ * @returns 
+ */
+export const makeBundledService = (bundleId: string) => 
+    (metadata: ServiceMetadata) => Service({ ...metadata, bundleId })
 
 export const getServiceMetadata = (target: any) => {
     return target[KEY_SVC_META];

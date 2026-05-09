@@ -1,7 +1,8 @@
 import EventEmitter from "events";
 import { getClassesForDecorator, getDecoratedClassObject, type ClassDecoratorRecord, type DecoratedClassObject } from "../decorator-registry";
 import { SVC_LIFECYCLE_DEFAULT, SVC_PRIORITY_DEFAULT } from "./decorators";
-import { SCEnvVars, type MetadataTransformer, type ServiceFilter, type ServiceFilterComplex, type ServiceMetadata, type ServiceRecord } from "./types";
+import { type MetadataTransformer, type ServiceFilter, type ServiceFilterComplex, type ServiceMetadata, type ServiceRecord } from "./types";
+import { AWEnvVars } from "../constants";
 
 export type BootServiceDeferred = {
     metadata: ServiceMetadata;
@@ -76,9 +77,14 @@ export type BootContainerOptions = {
 
 export type InjectDependency = [number, string, ServiceFilter];
 
-export const parseRuleStringToMap = (ruleString: string, initialMap: Record<string, boolean> = {}): Record<string, boolean> => {
-    const rules = ruleString.split(',');
+export const parseRuleStringToMap = (ruleString?: string, initialMap: Record<string, boolean> = {}): Record<string, boolean> => {
+    const rstring = (ruleString ?? '').trim();
+    if (!rstring) {
+        return initialMap;
+    }
+
     const map: Record<string, boolean> = {...initialMap};
+    const rules = rstring.split(/\s*,\s*/g);
     for (const rule of rules) {
         if (rule.startsWith('!')) {
             map[rule.slice(1)] = false;
@@ -91,8 +97,8 @@ export const parseRuleStringToMap = (ruleString: string, initialMap: Record<stri
 
 export const getConfigFromEnv = (env: Record<string, string>): BootContainerOptions => {
     const config: BootContainerOptions = {
-        runModes: parseRuleStringToMap(env[SCEnvVars.RUN_MODES] ?? '', {default: true}),
-        bundleIds: parseRuleStringToMap(env[SCEnvVars.BUNDLE_IDS] ?? ''),
+        runModes: parseRuleStringToMap(env[AWEnvVars.RUN_MODES], {[env['NODE_ENV'] ?? 'development']: true, default: true}),
+        bundleIds: parseRuleStringToMap(env[AWEnvVars.BUNDLE_IDS] ?? ''),
         nodeEnv: env['NODE_ENV'] ?? 'development',
     }
     return config;

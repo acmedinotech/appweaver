@@ -6,14 +6,15 @@ describe('decorator registry', () => {
 
     it('should get classes for decorator:Dec1Class', () => {
         const decorators = getClassesForDecorator('Dec1Class');
-        // expect(decorators).toHaveLength(2);
-        expect(decorators[0][1]).toEqual({ name: 'TestClass' });
-        // expect(decorators[1][1]).toEqual({ name: 'TestClass2' });
+        console.log(decorators);
+        expect(decorators).toHaveLength(2);
+        expect(decorators[0][2]).toEqual({ name: 'TestClass' });
+        expect(decorators[1][2]).toEqual({ name: 'TestClass2' });
     });
 
     it('should get decorators for class:TestClass', () => {
         const decorators = getDecoratorsForClass(TestClass);
-        expect(decorators).toEqual([['Dec1Class', { name: 'TestClass' }]]);
+        expect(decorators).toEqual([['Dec1Class', TestClass,{ name: 'TestClass' }]]);
     });
     
     it('should get properties for decorator:Dec2Property && class:TestClass', () => {
