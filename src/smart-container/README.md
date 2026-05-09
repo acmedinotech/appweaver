@@ -103,6 +103,8 @@ In order to ease container management across environments, the following env var
 
 > Note that any services that don't give an explicit runMode will use `default`
 
+**Any restrictions set at this level cannot be overridden**. For instance, if the container starts with `APPWEAVER_BUNDLE_IDS='*!'`, the application code *must* enable individual bundleIds in order to be used in application. Likewise, any bundles specifically disabled here will remain disabled.
+
 ## Interacting with Container
 
 TODO

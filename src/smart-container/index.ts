@@ -135,8 +135,9 @@ export class SmartContainer {
         runModes = {},
     }: Partial<BootContainerOptions> = {}) {
         this._config = getConfigFromEnv(process.env as Record<string, string>);
-        this._config.bundleIds = { default: true, ...this._config.bundleIds, ...bundleIds };
-        this._config.runModes = { ...this._config.runModes, ...runModes };
+        // bundleIds and runModes are guarded by any initial ENV_VAR values
+        this._config.bundleIds = { ...bundleIds, ...this._config.bundleIds };
+        this._config.runModes = { ...runModes, ...this._config.runModes };
     }
 
     public isRunModeEnabled(runMode: string|string[]) {
