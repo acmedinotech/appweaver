@@ -1,6 +1,6 @@
 {
   "name": "@acmedinotech/appweaver",
-  "version": "1.0.0-alpha",
+  "version": "0.0.1-alpha",
   "description": "AppStich is an application orchestration framework powered by decorators. It allows modular, auto-wired application composition. Inspired by Apache Felix & the OSGi framework spec.",
   "type": "module",
   "main": "./dist/index.cjs",
