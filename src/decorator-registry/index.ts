@@ -10,7 +10,9 @@ export type DecoratedClassObject = {
     guid: symbol;
     class: Record<string, Metadata>;
     properties: Record<string, Record<string, Metadata>>;
+    propertiesStatic: Record<string, Record<string, Metadata>>;
     methods: Record<string, Record<string, Metadata>>;
+    methodsStatic: Record<string, Record<string, Metadata>>;
 }
 
 let classNumber = 0;
@@ -24,13 +26,16 @@ const pushNewRecord = (guid: symbol) => {
         guid,
         class: {},
         properties: {},
+        propertiesStatic: {},
         methods: {},
+        methodsStatic: {},
     };
 }
 
 let lastConstructor: any = undefined;
 
 /**
+ * Injects a GUID into the constructor or prototype if GUID initialization is needed.
  * @param clazz Either a constructor function (for class and static members) or a prototype (for instance members)
  * @returns 
  */
@@ -66,19 +71,14 @@ const injectGuid = (clazz: any) => {
     return clazz;
 }
 
-export const getGuid = (clazz: any) => {
-    if (clazz[KEY_PARENT_GUID]) {
-        return clazz[KEY_GUID];
-    }
-    return (clazz.prototype ?? clazz)[KEY_GUID];
-}
+export const getGuid = (clazz: any) => (clazz.prototype ?? clazz)[KEY_GUID]
 
-export const setAndGetGuid = (clazz: any, fromMember = false) => getGuid(injectGuid(clazz))
+export const setAndGetGuid = (clazz: any) => getGuid(injectGuid(clazz))
 
 /**
  * @returns List of guids starting from root ancestor.
  */
-export const getClassGuidInheritance = (clazz: any) => {
+export const getGuidInheritanceChain = (clazz: any) => {
     const guids: symbol[] = [];
     let ptr = getGuid(clazz);
     while (ptr) {
@@ -109,8 +109,9 @@ export const getDecoratedClassObject = (guid: Symbol) => _classToDecoratedObject
 export type PropertyDecoratorRecord = [string, Metadata];
 const _decoratorToClassProps: Record<string, Record<symbol, PropertyDecoratorRecord[]>> = {};
 export const registerPropertyDecorator = (decorator: string, clazz: any, property: string, metadata: any) => {
-    const guid = setAndGetGuid(clazz, true);
-    const isStatic = clazz.prototype === undefined;
+    const guid = setAndGetGuid(clazz);
+    const isStatic = clazz.prototype !== undefined;
+    const propsMap = isStatic ? _classToDecoratedObject[guid].propertiesStatic : _classToDecoratedObject[guid].properties;
 
     if (!_decoratorToClassProps[decorator]) {
         _decoratorToClassProps[decorator] = {};
@@ -119,10 +120,10 @@ export const registerPropertyDecorator = (decorator: string, clazz: any, propert
         _decoratorToClassProps[decorator][guid] = [];
     }
     _decoratorToClassProps[decorator][guid].push([property, metadata]);
-    if (!_classToDecoratedObject[guid].properties[decorator]) {
-        _classToDecoratedObject[guid].properties[decorator] = {};
+    if (!propsMap[decorator]) {
+        propsMap[decorator] = {};
     }
-    _classToDecoratedObject[guid].properties[decorator][property] = metadata;
+    propsMap[decorator][property] = metadata;
 }
 
 export const getPropertyDecoratorsForClass = (decorator: string, clazz: any) => {
@@ -133,7 +134,10 @@ export const getPropertyDecoratorsForClass = (decorator: string, clazz: any) => 
 export type MethodDecoratorRecord = [string, Metadata];
 const _decoratorToClassMethods: Record<string, Record<symbol, MethodDecoratorRecord[]>> = {};
 export const registerMethodDecorator = (decorator: string, clazz: any, method: string, metadata: any) => {
-    const guid = setAndGetGuid(clazz, true);
+    const guid = setAndGetGuid(clazz);
+    const isStatic = clazz.prototype !== undefined;
+    const methodsMap = isStatic ? _classToDecoratedObject[guid].methodsStatic : _classToDecoratedObject[guid].methods;
+
     if (!_decoratorToClassMethods[decorator]) {
         _decoratorToClassMethods[decorator] = {};
     }
@@ -141,10 +145,10 @@ export const registerMethodDecorator = (decorator: string, clazz: any, method: s
         _decoratorToClassMethods[decorator][guid] = [];
     }
     _decoratorToClassMethods[decorator][guid].push([method, metadata]);
-    if (!_classToDecoratedObject[guid].methods[decorator]) {
-        _classToDecoratedObject[guid].methods[decorator] = {};
+    if (!methodsMap[decorator]) {
+        methodsMap[decorator] = {};
     }
-    _classToDecoratedObject[guid].methods[decorator][method] = metadata;
+    methodsMap[decorator][method] = metadata;
 }
 
 export const getMethodDecoratorsForClass = (decorator: string, clazz: any) => {
