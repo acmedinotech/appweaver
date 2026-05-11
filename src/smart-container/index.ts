@@ -239,8 +239,8 @@ export class SmartContainer {
         this.serviceTracker[metadata.id] = {status, error};
 
         const dependencies = [
-            ...(decoratedClassObject.decoratorToProps.Inject ?? []).map(([memberKey, filter]) => [0, memberKey, filter] as InjectDependency),
-            ...(decoratedClassObject.decoratorToMethods.Inject ?? []).map(([memberKey, filter]) => [1, memberKey, filter] as InjectDependency),
+            ...Object.entries(decoratedClassObject.properties.Inject ?? {}).map(([memberKey, filter]) => [0, memberKey, filter] as InjectDependency),
+            ...Object.entries(decoratedClassObject.methods.Inject ?? {}).map(([memberKey, filter]) => [1, memberKey, filter] as InjectDependency),
         ]
         this.dependencyGraph[metadata.id] = dependencies;
 
@@ -257,7 +257,7 @@ export class SmartContainer {
         }
 
         const activator = async () => {
-            const activatorMethod = decoratedClassObject.decoratorToMethods.Activate?.[0]?.[0];
+            const activatorMethod = Object.keys((decoratedClassObject.methods.Activate??{}))[0];
             if (activatorMethod) {
                 try {
                     await service[activatorMethod](metadata);
@@ -274,9 +274,9 @@ export class SmartContainer {
             me.register(metadata.id, service, metadata);
             console.log('ℹ️ bootService: ', status == 'active' ? '✅' : '⚠', metadata.id);
             me.serviceTracker[metadata.id] = {status, error};
-
-            if (decoratedClassObject.decoratorToMethods.PostBoot?.[0]) {
-                me.postBootServices.push({service, method: decoratedClassObject.decoratorToMethods.PostBoot[0][0], priority: metadata.priority ?? SVC_PRIORITY_DEFAULT});
+            const postBootMethod = Object.keys((decoratedClassObject.methods.PostBoot??{}))[0];
+            if (postBootMethod) {
+                me.postBootServices.push({service, method: postBootMethod, priority: metadata.priority ?? SVC_PRIORITY_DEFAULT});
             }
             // @todo emit event 'serviceBooted'
         }

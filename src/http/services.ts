@@ -61,14 +61,13 @@ export class BaseHttpService {
         return controllers.map((controller) => {
             const _allDecorators = getDecoratedClassObject(getGuid(controller));
             const routes = [
-                ..._allDecorators.decoratorToMethods[HttpDecorators.ROUTE] ?? [], 
-            ]
+                ...Object.entries(_allDecorators.methods[HttpDecorators.ROUTE] ?? {})] 
                 .sort((a, b) => (b[1].priority??SVC_PRIORITY_DEFAULT) - (a[1].priority??SVC_PRIORITY_DEFAULT))
                 .map((cur) => {
                     return {method: cur[0], metadata: cur[1]}
                 });
             const middleware = [
-                ..._allDecorators.decoratorToMethods[HttpDecorators.MIDDLEWARE] ?? [], 
+                ...Object.entries(_allDecorators.methods[HttpDecorators.MIDDLEWARE] ?? {}), 
             ]
                 .sort((a, b) => (b[1].priority??SVC_PRIORITY_DEFAULT) - (a[1].priority??SVC_PRIORITY_DEFAULT))
                 .map((cur) => {

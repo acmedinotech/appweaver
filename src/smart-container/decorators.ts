@@ -5,13 +5,6 @@ export const SVC_PRIORITY_DEFAULT = 0;
 export const SVC_LIFECYCLE_DEFAULT = 'container';
 
 /**
- * CLASS DECORATOR: Defines the entrypoint for an application.
- * @param metadata 
- */
-export const Application = (metadata: any) => {
-}
-
-/**
  * CLASS DECORATOR: Defines a service in the container.
  * @param metadata 
  * @returns 

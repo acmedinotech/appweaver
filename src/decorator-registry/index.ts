@@ -9,8 +9,8 @@ export type ClassDecoratorRecord = [symbol, ClassConstructor, Metadata];
 export type DecoratedClassObject = {
     guid: symbol;
     class: Record<string, Metadata>;
-    decoratorToProps: Record<string, [string, Metadata][]>;
-    decoratorToMethods: Record<string, [string, Metadata][]>;
+    properties: Record<string, Record<string, Metadata>>;
+    methods: Record<string, Record<string, Metadata>>;
 }
 
 let classNumber = 0;
@@ -23,19 +23,18 @@ const pushNewRecord = (guid: symbol) => {
     _classToDecoratedObject[guid] = {
         guid,
         class: {},
-        decoratorToProps: {},
-        decoratorToMethods: {},
+        properties: {},
+        methods: {},
     };
 }
 
 let lastConstructor: any = undefined;
 
 /**
- * @param clazz Either a constructor function or a class. If a class is provided, the prototype is
- * used to store the GUID.
+ * @param clazz Either a constructor function (for class and static members) or a prototype (for instance members)
  * @returns 
  */
-const injectGuid = (clazz: any, fromMember = false) => {
+const injectGuid = (clazz: any) => {
     const constructor = clazz, prototype = clazz.prototype;
     const rootGuid = getGuid(clazz);
     if (prototype === undefined) {
@@ -74,7 +73,20 @@ export const getGuid = (clazz: any) => {
     return (clazz.prototype ?? clazz)[KEY_GUID];
 }
 
-export const setAndGetGuid = (clazz: any, fromMember = false) => getGuid(injectGuid(clazz, fromMember))
+export const setAndGetGuid = (clazz: any, fromMember = false) => getGuid(injectGuid(clazz))
+
+/**
+ * @returns List of guids starting from root ancestor.
+ */
+export const getClassGuidInheritance = (clazz: any) => {
+    const guids: symbol[] = [];
+    let ptr = getGuid(clazz);
+    while (ptr) {
+        guids.push(ptr);
+        ptr = Object.getPrototypeOf(ptr);
+    }
+    return guids.reverse();
+}
 
 const _decoratorToClassses: Record<string, ClassDecoratorRecord[]> = {}
 export const registerClassDecorator = (decorator: string, clazz: any, metadata: any) => {
@@ -90,7 +102,7 @@ export const registerClassDecorator = (decorator: string, clazz: any, metadata: 
 
 export const getClassesForDecorator = (decorator: string) => _decoratorToClassses[decorator] ?? []
 
-export const getDecoratorsForClass = (clazz: any) => _classToDecorators[setAndGetGuid(clazz)]
+export const getDecoratorsForClass = (clazz: any) => _classToDecorators[getGuid(clazz)]
 
 export const getDecoratedClassObject = (guid: Symbol) => _classToDecoratedObject[guid as any]
 
@@ -107,10 +119,10 @@ export const registerPropertyDecorator = (decorator: string, clazz: any, propert
         _decoratorToClassProps[decorator][guid] = [];
     }
     _decoratorToClassProps[decorator][guid].push([property, metadata]);
-    if (!_classToDecoratedObject[guid].decoratorToProps[decorator]) {
-        _classToDecoratedObject[guid].decoratorToProps[decorator] = [];
+    if (!_classToDecoratedObject[guid].properties[decorator]) {
+        _classToDecoratedObject[guid].properties[decorator] = {};
     }
-    _classToDecoratedObject[guid].decoratorToProps[decorator].push([property, metadata]);
+    _classToDecoratedObject[guid].properties[decorator][property] = metadata;
 }
 
 export const getPropertyDecoratorsForClass = (decorator: string, clazz: any) => {
@@ -129,14 +141,10 @@ export const registerMethodDecorator = (decorator: string, clazz: any, method: s
         _decoratorToClassMethods[decorator][guid] = [];
     }
     _decoratorToClassMethods[decorator][guid].push([method, metadata]);
-    // if (!_classToDecoratedObject[guid].methods[method]) {
-    //     _classToDecoratedObject[guid].methods[method] = {};
-    // }
-    // _classToDecoratedObject[guid].methods[method][decorator] = metadata;
-    if (!_classToDecoratedObject[guid].decoratorToMethods[decorator]) {
-        _classToDecoratedObject[guid].decoratorToMethods[decorator] = [];
+    if (!_classToDecoratedObject[guid].methods[decorator]) {
+        _classToDecoratedObject[guid].methods[decorator] = {};
     }
-    _classToDecoratedObject[guid].decoratorToMethods[decorator].push([method, metadata]);
+    _classToDecoratedObject[guid].methods[decorator][method] = metadata;
 }
 
 export const getMethodDecoratorsForClass = (decorator: string, clazz: any) => {
