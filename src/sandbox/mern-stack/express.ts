@@ -1,11 +1,9 @@
 import express from 'express';
-import { Controller, HttpDecorators, Route, Server } from '../http/decorators';
-import { BaseHttpService, type ControllerAggregate } from '../http/services';
-import { SmartContainer } from '../smart-container';
-import { Activate, Service } from '../smart-container/decorators';
-import type { ServiceMetadata } from '../smart-container/types';
+import { Activate, Service, SmartContainer, type ServiceMetadata } from '../../library';
+import { HttpDecorators, Server } from '../../http/decorators';
+import { BaseHttpService, type ControllerAggregate } from '../../http/services';
 
-const debugRequestHandler: express.RequestHandler = (req, res) => {
+export const debugRequestHandler: express.RequestHandler = (req, res) => {
     res.json({
         method: req.method,
         path: req.path,
@@ -102,37 +100,3 @@ export class ExpressServer extends BaseHttpService {
         });
     }
 }
-
-@Controller({
-    rootPath: '/sandbox/express',
-    isSubApp: true,
-})
-@Service({
-    id: 'SandboxController1',
-    priority: 100,
-    bundleId: 'express'
-})
-class SandboxController1 {
-    @Route({
-        path: '/',
-        methods: ['*'],
-    })
-    doAll(req: express.Request, res: express.Response, next: express.NextFunction) {
-        debugRequestHandler(req, res, next);
-    }
-
-    @Route({
-        paths: ['/safe', '/safe/{*rest}'],
-        methods: ['GET', 'OPTIONS', 'HEAD'],
-    })
-    doSafe(req: express.Request, res: express.Response, next: express.NextFunction) {
-        debugRequestHandler(req, res, next);
-    }
-}
-const container = new SmartContainer({
-    bundleIds: { express: true },
-});
-
-container.bootContainer().then(() => {
-    console.log('🟢 container booted');
-});

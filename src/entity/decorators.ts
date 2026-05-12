@@ -8,9 +8,11 @@ export enum EntityDecorators {
 
 export type ModelMetadata = {
     name: string;
-    collection: string;
+    collection?: string;
     relations?: any;
 }
+
+export const DEFAULT_COLLECTION = 'appweaver.default';
 
 /**
  * CLASS DECORATOR: Defines an entity @Model.
@@ -56,7 +58,7 @@ export type PropertyMetadata = {
  * METHOD DECORATOR: Use on an instance or static method. Function must conform to {@see EntityValidatorFn} signature.
  */
 export const Validator  = () => {
-    return (target: any, propertyKey: string, descriptor: PropertyDescriptor) => {
+    return (target: any, propertyKey: string, _: PropertyDescriptor) => {
         registerMethodDecorator(EntityDecorators.Validator, target, propertyKey, {});
     };
 }
@@ -74,7 +76,7 @@ export const Property = (metadata: Partial<PropertyMetadata>) => {
 
 /**
  * @param modelDef 
- * @param entity If undefined, convention dictates that this is an instance method of a @Model class.
+ * @param entity If undefined, convention dictates that `this` is an instance method of a @Model class.
  * @returns 
  */
 export type EntityValidatorFn = (modelDef: ModelDefinition, entity?: any) => undefined | ValidationError;
