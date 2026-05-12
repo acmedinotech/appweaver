@@ -36,8 +36,10 @@ let lastConstructor: any = undefined;
 
 /**
  * Injects a GUID into the constructor or prototype if GUID initialization is needed.
+ * **GUIDs are RELATIVE to each application run!** Make no assumptions about GUID consistency across runs.
  * @param clazz Either a constructor function (for class and static members) or a prototype (for instance members)
- * @returns 
+ * @returns
+ * @todo track parent-child guid relationships
  */
 const injectGuid = (clazz: any) => {
     const constructor = clazz, 
@@ -73,7 +75,14 @@ const injectGuid = (clazz: any) => {
     return clazz;
 }
 
-export const getGuid = (clazz: any) => (clazz.prototype ?? clazz)[KEY_GUID]
+const assertObject = (obj: any) => {
+    if (typeof obj !== 'object' || obj === null) {
+        throw new Error('clazz-not-object');
+    }
+    return obj;
+}
+
+export const getGuid = (clazz: any) => assertObject((clazz.prototype ?? clazz))[KEY_GUID]
 
 export const setAndGetGuid = (clazz: any) => getGuid(injectGuid(clazz))
 
@@ -156,8 +165,6 @@ export type PropertyDecoratorRecord = [string, Metadata];
 const _decoratorToClassProps: Record<string, Record<symbol, PropertyDecoratorRecord[]>> = {};
 export const registerPropertyDecorator = (decorator: string, clazz: any, property: string, metadata: any) => {
     const guid = setAndGetGuid(clazz);
-    const isStatic = clazz.prototype !== undefined;
-    const propsMap = isStatic ? _classToDecoratedObject[guid].propertiesStatic : _classToDecoratedObject[guid].properties;
 
     if (!_decoratorToClassProps[decorator]) {
         _decoratorToClassProps[decorator] = {};
@@ -166,6 +173,9 @@ export const registerPropertyDecorator = (decorator: string, clazz: any, propert
         _decoratorToClassProps[decorator][guid] = [];
     }
     _decoratorToClassProps[decorator][guid].push([property, metadata]);
+    
+    const isStatic = clazz.prototype !== undefined;
+    const propsMap = isStatic ? _classToDecoratedObject[guid].propertiesStatic : _classToDecoratedObject[guid].properties;
     if (!propsMap[decorator]) {
         propsMap[decorator] = {};
     }
@@ -181,9 +191,7 @@ export type MethodDecoratorRecord = [string, Metadata];
 const _decoratorToClassMethods: Record<string, Record<symbol, MethodDecoratorRecord[]>> = {};
 export const registerMethodDecorator = (decorator: string, clazz: any, method: string, metadata: any) => {
     const guid = setAndGetGuid(clazz);
-    const isStatic = clazz.prototype !== undefined;
-    const methodsMap = isStatic ? _classToDecoratedObject[guid].methodsStatic : _classToDecoratedObject[guid].methods;
-
+    
     if (!_decoratorToClassMethods[decorator]) {
         _decoratorToClassMethods[decorator] = {};
     }
@@ -191,6 +199,9 @@ export const registerMethodDecorator = (decorator: string, clazz: any, method: s
         _decoratorToClassMethods[decorator][guid] = [];
     }
     _decoratorToClassMethods[decorator][guid].push([method, metadata]);
+
+    const isStatic = clazz.prototype !== undefined;
+    const methodsMap = isStatic ? _classToDecoratedObject[guid].methodsStatic : _classToDecoratedObject[guid].methods;
     if (!methodsMap[decorator]) {
         methodsMap[decorator] = {};
     }

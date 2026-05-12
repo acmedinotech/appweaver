@@ -1,4 +1,4 @@
-import { getDecoratedClassObject, getGuid } from "../decorator-registry";
+import { getClassDecoratorMap, getGuid } from "../decorator-registry";
 import { SmartContainer } from "../smart-container";
 import { Service } from "../smart-container/decorators";
 import { Controller, Middleware, Route } from "./decorators";

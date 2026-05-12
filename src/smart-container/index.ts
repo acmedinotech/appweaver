@@ -1,4 +1,4 @@
-import { getClassesForDecorator, getDecoratedClassObject, type ClassDecoratorRecord, type DecoratedClassObject } from "../decorator-registry";
+import { getClassesForDecorator, getClassDecoratorMap, type ClassDecoratorRecord, type ClassDecoratorMap } from "../decorator-registry";
 import { SVC_LIFECYCLE_DEFAULT, SVC_PRIORITY_DEFAULT } from "./decorators";
 import { type MetadataTransformer, type ServiceFilter, type ServiceFilterComplex, type ServiceMetadata, type ServiceRecord } from "./types";
 import { AWEnvVars } from "../constants";
@@ -115,7 +115,7 @@ export const addMetadataTransformer = (decorator: string, transformer: MetadataT
     _metadataTransformers[decorator] = transformer;
 }
 
-export const applyMetadataTransformers = (_metadata: ServiceMetadata, decoratedClassObject: DecoratedClassObject) => {
+export const applyMetadataTransformers = (_metadata: ServiceMetadata, decoratedClassObject: ClassDecoratorMap) => {
     let metadata = {..._metadata};
     for (const decorator of Object.keys(decoratedClassObject.class)) {
         if (_metadataTransformers[decorator]) {
@@ -232,7 +232,7 @@ export class SmartContainer {
         }
 
         const service = new cls();
-        const decoratedClassObject = getDecoratedClassObject(guid);
+        const decoratedClassObject = getClassDecoratorMap(guid);
         const metadata = applyMetadataTransformers(_metadata, decoratedClassObject);
 
         status = 'pending';

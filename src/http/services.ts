@@ -1,4 +1,4 @@
-import { getDecoratedClassObject, getGuid } from "../decorator-registry";
+import { getClassDecoratorMap, getGuid } from "../decorator-registry";
 import { addMetadataTransformer, type SmartContainer } from "../smart-container";
 import { PostBoot, Service, SVC_PRIORITY_DEFAULT } from "../smart-container/decorators";
 import type { MetadataTransformer, ServiceMetadata } from "../smart-container/types";
@@ -59,7 +59,7 @@ export class BaseHttpService {
             cardinality: '0..n',
         }) as any[];
         return controllers.map((controller) => {
-            const _allDecorators = getDecoratedClassObject(getGuid(controller));
+            const _allDecorators = getClassDecoratorMap(getGuid(controller));
             const routes = [
                 ...Object.entries(_allDecorators.methods[HttpDecorators.ROUTE] ?? {})] 
                 .sort((a, b) => (b[1].priority??SVC_PRIORITY_DEFAULT) - (a[1].priority??SVC_PRIORITY_DEFAULT))
