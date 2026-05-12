@@ -10,6 +10,9 @@ export type BootServiceDeferred = {
     activator: () => Promise<void>;
 }
 
+/**
+ * Normalizes metadata, defaulting the service to `disabled`.
+ */
 export const normalizeServiceMetadata = (metadata: Partial<ServiceMetadata> = {}): ServiceMetadata => {
     return {
         // @todo better default id
@@ -17,7 +20,7 @@ export const normalizeServiceMetadata = (metadata: Partial<ServiceMetadata> = {}
         interfaces: [],
         priority: SVC_PRIORITY_DEFAULT,
         lifecycle: SVC_LIFECYCLE_DEFAULT,
-        enabled: true,
+        disabled: true,
         bundleId: '*',
         runModes: ['default'],
         ...metadata,
@@ -216,7 +219,7 @@ export class SmartContainer {
 
     protected postBootServices: {service: any, method: string, priority: number}[] = [];
 
-    bootService([guid, cls, _metadata]: ClassDecoratorRecord) {
+    bootService([guid, _metadata, clsGetter]: ClassDecoratorRecord) {
         // @todo apply enabled
 
         let status = 'defined';
@@ -231,9 +234,10 @@ export class SmartContainer {
             return {metadata: _metadata, lastInjectorCount: 0, injector: () => 0, activator: async() => {}};
         }
 
+        const cls = clsGetter();
         const service = new cls();
         const decoratedClassObject = getClassDecoratorMap(guid);
-        const metadata = applyMetadataTransformers(_metadata, decoratedClassObject);
+        const metadata = applyMetadataTransformers(_metadata as ServiceMetadata, decoratedClassObject);
 
         status = 'pending';
         this.serviceTracker[metadata.id] = {status, error};
@@ -289,23 +293,24 @@ export class SmartContainer {
 
         const pendingServices: BootServiceDeferred[] = [];
         const annotatedServices = getClassesForDecorator('Service');
-        for (const decRec of annotatedServices) {
-            const metadata = normalizeServiceMetadata(decRec[2]);
-            if (!this.isBundleIdEnabled(metadata.bundleId)) {
+
+        for (const [guid, metadata, clsGetter] of annotatedServices) {
+            const normMetadata = normalizeServiceMetadata(metadata);
+            if (!this.isBundleIdEnabled(normMetadata.bundleId)) {
                 console.log(`🔴`, {message: 'bundleId not enabled', metadata});
                 continue;
             }
-            if (!this.isRunModeEnabled(metadata.runModes ?? 'default')) {
+            if (!this.isRunModeEnabled(normMetadata.runModes ?? 'default')) {
                 console.log(`🔴`, {message: 'runMode not enabled', metadata});
                 continue;
             }
 
-            const {injector, activator} = this.bootService(decRec);
+            const {injector, activator} = this.bootService([guid, normMetadata, clsGetter]);
             const lastInjectorCount = injector();
             if (lastInjectorCount == 0) {
                 await activator();
             } else {
-                pendingServices.push({metadata, lastInjectorCount, injector, activator});
+                pendingServices.push({metadata: normMetadata, lastInjectorCount, injector, activator});
             }
         }
 

@@ -5,7 +5,8 @@ const EMPTY_GUID = Symbol();
 
 export type ClassConstructor = any;
 export type Metadata = Record<string, any>;
-export type ClassDecoratorRecord = [symbol, Metadata];
+export type ClassGetter = () => any
+export type ClassDecoratorRecord = [symbol, Metadata, ClassGetter];
 export type ClassDecoratorMap = {
     guid: symbol;
     class: Record<string, Metadata>;
@@ -34,6 +35,8 @@ const pushNewRecord = (guid: symbol) => {
 
 let lastConstructor: any = undefined;
 
+const _guidToClass: Record<symbol, any> = {};
+
 /**
  * Injects a GUID into the constructor or prototype if GUID initialization is needed.
  * **GUIDs are RELATIVE to each application run!** Make no assumptions about GUID consistency across runs.
@@ -52,6 +55,7 @@ const injectGuid = (clazz: any) => {
             clazz[KEY_GUID] = makeNewGuid();
             pushNewRecord(clazz[KEY_GUID]);
             lastConstructor = constructor;
+            _guidToClass[clazz[KEY_GUID]] = clazz;
         }
     } else {
         if (rootGuid === undefined) {
@@ -60,16 +64,19 @@ const injectGuid = (clazz: any) => {
             constructor[KEY_GUID] = prototype[KEY_GUID];
             pushNewRecord(clazz[KEY_GUID]);
             lastConstructor = constructor;
+            _guidToClass[constructor[KEY_GUID]] = constructor;
         } else if (prototype === lastConstructor) {
             // case: prototype assigned guid but first time at constructor level
             constructor[KEY_GUID] = rootGuid;
             lastConstructor = constructor;
+            _guidToClass[constructor[KEY_GUID]] = constructor;
         } else if (constructor !== lastConstructor) {
             // case: sub-class requiring new guid;
             prototype[KEY_GUID] = makeNewGuid();
             clazz[KEY_GUID] = prototype[KEY_GUID];
             pushNewRecord(clazz[KEY_GUID]);
             lastConstructor = constructor;
+            _guidToClass[constructor[KEY_GUID]] = constructor;
         }
     }
     return clazz;
@@ -107,7 +114,9 @@ export const registerClassDecorator = (decorator: string, clazz: any, metadata: 
     if (!_decoratorToClassses[decorator]) {
         _decoratorToClassses[decorator] = [];
     }
-    _decoratorToClassses[decorator].push([guid, metadata]);
+    _decoratorToClassses[decorator].push([guid, metadata, () => {
+        return _guidToClass[guid];
+    }]);
     _classToDecorators[guid].push([decorator, clazz, metadata]);
     _classToDecoratedObject[guid].class[decorator] = metadata;
     return clazz;

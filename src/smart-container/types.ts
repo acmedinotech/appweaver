@@ -30,7 +30,7 @@ export type ServiceMetadata = {
     priority?: number;
     interfaces?: string[];
     lifecycle?: 'singleton' | 'container' | 'transient';
-    enabled?: boolean;
+    disabled?: boolean;
     runModes?: string[];
     properties?: Record<string, any>;
 }
