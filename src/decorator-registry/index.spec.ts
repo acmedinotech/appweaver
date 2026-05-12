@@ -1,82 +1,146 @@
-import { getClassesForDecorator, getDecoratorsForClass, getMethodDecoratorsForClass, getPropertyDecoratorsForClass } from ".";
+import { getClassesForDecorator, getDecoratorsForClass, getInheritedClassDecoratorMap, getMethodDecoratorsForClass, getPropertyDecoratorsForClass } from ".";
 import { registerClassDecorator, registerMethodDecorator, registerPropertyDecorator } from "../decorator-registry"
 
-const Dec1Class = (metadata: any) => {
+const ClassMeta = (metadata: any) => {
     return (target: any) => {
-        registerClassDecorator('Dec1Class', target, metadata);
+        registerClassDecorator('ClassMeta', target, metadata);
         return target;
     }
 }
 
-const Dec2Property = (metadata: any) => {
+const PropertyMeta = (metadata: any) => {
     return (target: any, property: string) => {
-        registerPropertyDecorator('Dec2Property', target, property, metadata);
+        registerPropertyDecorator('PropertyMeta', target, property, metadata);
     }
 }
 
-const Dec3Method = (metadata: any) => {
+const MethodMeta = (metadata: any) => {
     return (target: any, property: string, descriptor: PropertyDescriptor) => {
-        registerMethodDecorator('Dec3Method', target, property, metadata);
+        registerMethodDecorator('MethodMeta', target, property, metadata);
         return descriptor;
     }
 }
 
-@Dec1Class({
-    name: 'TestClass',
+@ClassMeta({
+    name: 'BaseClass',
+    description: 'BaseClass-description',
+    lastTouched: 'BaseClass'
 })
-export class TestClass {
-    @Dec2Property({
-        name: 'publicString',
-    })
-    publicString = "publicString";
-    @Dec2Property({
-        name: 'protectedString',
-    })
-    protected protectedString = "protectedString";
-    @Dec2Property({
-        name: 'privateString',
-    })
-    private privateString = "privateString";
+class BaseClass {
+    @PropertyMeta({ name: 'prop1', required: true })
+    prop1 = "";
 
-    @Dec3Method({
-        name: 'method1',
-    })
-    method1() {
-        return 'method1';
-    }
+    @MethodMeta({ name: 'method1', })
+    method1() {}
 }
 
-@Dec1Class({
-    name: 'TestClass2',
+@ClassMeta({
+    name: 'ChildOfBaseClass',
+    description: 'ChildOfBaseClass-description',
 })
-export class TestClass2 {}
+class ChildOfBaseClass extends BaseClass {
+    @PropertyMeta({ name: 'prop1_override', required: false })
+    prop1 = "";
 
-describe('decorator registry', () => {
-    const autowire = [TestClass, TestClass2];
+    @MethodMeta({ override: true })
+    method1() {}
+}
 
-    it('should get classes for decorator:Dec1Class', () => {
-        const decorators = getClassesForDecorator('Dec1Class');
-        expect(decorators).toHaveLength(2);
-        expect(decorators[0][2]).toEqual({ name: 'TestClass' });
-        expect(decorators[1][2]).toEqual({ name: 'TestClass2' });
+@ClassMeta({ name: 'BaseClass2', })
+class BaseClass2 { }
+
+[BaseClass, BaseClass2, ChildOfBaseClass];
+
+describe('decorator-registry', () => {
+    it('registers 3 class decorators for @ClassMeta', () => {
+        const classes = getClassesForDecorator('ClassMeta')
+            .map(([guid, metadata]) => [typeof guid, metadata]);
+        expect(classes).toEqual([
+            [
+                "symbol",
+                {
+                    "name": "BaseClass",
+                    "description": "BaseClass-description",
+                    "lastTouched": "BaseClass"
+                }
+            ],
+            [
+                "symbol",
+                {
+                    "name": "ChildOfBaseClass",
+                    "description": "ChildOfBaseClass-description"
+                }
+            ],
+            [
+                "symbol",
+                {
+                    "name": "BaseClass2"
+                }
+            ]
+        ]);
     });
 
-    it('should get decorators for class:TestClass', () => {
-        const decorators = getDecoratorsForClass(TestClass);
-        expect(decorators).toEqual([['Dec1Class', TestClass,{ name: 'TestClass' }]]);
-    });
-    
-    it('should get properties for decorator:Dec2Property && class:TestClass', () => {
-        const properties = getPropertyDecoratorsForClass('Dec2Property', TestClass);
-        expect(properties).toEqual(    [
-            [ 'publicString', { name: 'publicString' } ],
-            [ 'protectedString', { name: 'protectedString' } ],
-            [ 'privateString', { name: 'privateString' } ]
-          ])
+    it('registers 1 @PropertyMeta for ChildOfBaseClass', () => {
+        const properties = getPropertyDecoratorsForClass('PropertyMeta', ChildOfBaseClass)
+        const [propName, metadata] = properties[0];
+        expect(propName).toBe('prop1');
+        expect(metadata).toEqual({ name: 'prop1_override', required: false });
     });
 
-    it('should get methods for decorator:Dec3Method && class:TestClass', () => {
-        const methods = getMethodDecoratorsForClass('Dec3Method', TestClass);
-        expect(methods).toEqual([['method1', { name: 'method1' }]])
+    describe('#getInheritedClassDecoratorMap()', () => {
+        it('gets merged decorator map of ChildOfBaseClass', () => {
+            const {guid, propertiesStatic, methodsStatic,...mergedMap} = getInheritedClassDecoratorMap(ChildOfBaseClass);
+            expect({
+                class: {
+                    ClassMeta: {
+                        name: 'ChildOfBaseClass',
+                        description: 'ChildOfBaseClass-description',
+                        lastTouched: 'BaseClass'
+                    }
+                },
+                properties: {
+                    PropertyMeta: {
+                        prop1: {
+                            name: 'prop1_override',
+                            required: false
+                        }
+                    }
+                },
+                methods: {
+                    MethodMeta: {
+                        method1: {
+                            name: 'method1',
+                            override: true
+                        }
+                    }
+                }
+            }).toMatchObject(mergedMap);
+        });
+        it('gets partialmerged decorator map of ChildOfBaseClass (ClassMeta, PropertyMeta)', () => {
+            const {guid, propertiesStatic, methodsStatic,...mergedMap} = getInheritedClassDecoratorMap(ChildOfBaseClass, ['ClassMeta', 'PropertyMeta']);
+            expect({
+                class: {
+                    ClassMeta: {
+                        name: 'ChildOfBaseClass',
+                        description: 'ChildOfBaseClass-description',
+                        lastTouched: 'BaseClass'
+                    },
+                    PropertyMeta: {}
+                },
+                properties: {
+                    ClassMeta: {},
+                    PropertyMeta: {
+                        prop1: {
+                            name: 'prop1_override',
+                            required: false
+                        }
+                    }
+                },
+                methods: {
+                    ClassMeta: {},
+                    PropertyMeta: {}
+                }
+            }).toMatchObject(mergedMap);
+        });
     });
 });
