@@ -1,4 +1,4 @@
-import { getClassDecoratorMap, getGuid, getInheritedClassDecoratorMap, type ClassDecoratorMap } from "../decorator-registry";
+import { getClassDecoratorMap, getClassForGuid, getGuid, getInheritedClassDecoratorMap, type ClassDecoratorMap } from "../decorator-registry";
 import { EntityDecorators, ValidationError, type EntityValidatorFn, type ModelDefinition, type PropertyMetadata } from "./decorators";
 
 export const passthruDecode = (value: any, modelDef: ModelDefinition) => value;
@@ -103,6 +103,13 @@ export const getModelDefinition = (clazz: any) => {
     modelDefCache[cacheKey] = makeModelDefinition(allDecs);
     return modelDefCache[cacheKey];
 }
+
+export const getModelDefinitionByGuid = (guid: symbol) => {
+    const clazz = getClassForGuid(guid);
+    if (!clazz) return undefined;
+    return getModelDefinition(clazz);
+}
+
 /**
  * 
  * @param modelInst A user-supplied @Model instance.

@@ -1,7 +1,10 @@
 import express from 'express';
-import { Activate, Service, SmartContainer, type ServiceMetadata } from '../../library';
+import { Activate, PostBoot, Service, SmartContainer, type ServiceMetadata } from '../../library';
 import { HttpDecorators, Server } from '../../http/decorators';
 import { BaseHttpService, type ControllerAggregate } from '../../http/services';
+
+export const bundleId = 'appweaver.sandbox.mern-stack.express';
+export const idExpressServer = `express.server`;
 
 export const debugRequestHandler: express.RequestHandler = (req, res) => {
     res.json({
@@ -22,8 +25,8 @@ export const debugRequestHandler: express.RequestHandler = (req, res) => {
 }
 
 @Service({
-    id: 'express.server',
-    bundleId: 'express'
+    id: idExpressServer,
+    bundleId
 })
 @Server({
     port: 3001
@@ -91,6 +94,7 @@ export class ExpressServer extends BaseHttpService {
         });
     }
 
+    @PostBoot()
     async postBoot(container: SmartContainer) {
         const controllers = BaseHttpService.gatherControllers(container);
         const port = this.metadata.properties?.[HttpDecorators.SERVER]?.port ?? 3000;

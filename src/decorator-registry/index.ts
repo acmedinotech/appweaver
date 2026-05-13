@@ -17,7 +17,7 @@ export type ClassDecoratorMap = {
 }
 
 let classNumber = 0;
-const _classToDecorators: Record<symbol, [string, ClassConstructor, Metadata][]> = {};
+const _classToDecorators: Record<symbol, [string, ClassGetter, Metadata][]> = {};
 const _classToDecoratedObject: Record<symbol, ClassDecoratorMap> = {};
 
 const makeNewGuid = () => Symbol(`${KEY_PREFIX}${classNumber++}`);
@@ -35,7 +35,12 @@ const pushNewRecord = (guid: symbol) => {
 
 let lastConstructor: any = undefined;
 
+/**
+ * Maps GUIDs to their processed constructors.
+ */
 const _guidToClass: Record<symbol, any> = {};
+
+export const getClassForGuid = (guid: symbol) => _guidToClass[guid];
 
 /**
  * Injects a GUID into the constructor or prototype if GUID initialization is needed.
@@ -117,17 +122,14 @@ export const registerClassDecorator = (decorator: string, clazz: any, metadata: 
     _decoratorToClassses[decorator].push([guid, metadata, () => {
         return _guidToClass[guid];
     }]);
-    _classToDecorators[guid].push([decorator, clazz, metadata]);
+    _classToDecorators[guid].push([decorator, () => _guidToClass[guid], metadata]);
     _classToDecoratedObject[guid].class[decorator] = metadata;
     return clazz;
 }
 
 export const getClassesForDecorator = (decorator: string) => _decoratorToClassses[decorator] ?? []
 
-export const getDecoratorsForClass = (clazz: any) => {
-    const guid = getGuid(clazz);
-    return _classToDecorators[getGuid(clazz)]
-}
+export const getDecoratorsForClass = (clazz: any) => _classToDecorators[getGuid(clazz)];
 
 export const getClassDecoratorMap = (guid: Symbol): ClassDecoratorMap => _classToDecoratedObject[guid as any]
 

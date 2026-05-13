@@ -1,7 +1,7 @@
 import express from 'express';
 import { Controller, Route } from '../http/decorators';
 import { Service, SmartContainer } from '../library';
-import { debugRequestHandler } from './mern-stack/express';
+import { debugRequestHandler } from './mern-stack.server/express';
 
 @Controller({
     rootPath: '/sandbox/express',

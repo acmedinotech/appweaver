@@ -14,6 +14,12 @@ export type ModelMetadata = {
 
 export const DEFAULT_COLLECTION = 'appweaver.default';
 
+const collectionToGuids: Record<string, symbol[]> = {};
+const modelToGuid: Record<string, symbol> = {};
+
+export const getModelDefinitionGuid = (name: string, collection = DEFAULT_COLLECTION) => modelToGuid[`${collection}@${name}`];
+export const getModelDefinitionsByCollection = (collection = DEFAULT_COLLECTION) => collectionToGuids[collection] ?? [];
+
 /**
  * CLASS DECORATOR: Defines an entity @Model.
  * @param metadata 
@@ -21,7 +27,16 @@ export const DEFAULT_COLLECTION = 'appweaver.default';
  */
 export const Model = (metadata: ModelMetadata) => {
     return (target: any) => {
-        registerClassDecorator(EntityDecorators.Model, target, metadata);
+        const meta = {collection: DEFAULT_COLLECTION, ...metadata};
+        registerClassDecorator(EntityDecorators.Model, target, meta);
+        
+        const key = `${meta.collection}@${meta.name}`;
+        if (!collectionToGuids[meta.collection]) {
+            collectionToGuids[meta.collection] = [];
+        }
+        const guid = getGuid(target);
+        collectionToGuids[meta.collection].push(guid);
+        modelToGuid[key] = guid;
     };
 };
 
