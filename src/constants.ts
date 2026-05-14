@@ -5,23 +5,32 @@ export enum AWEnvVars {
     BUNDLE_IDS = 'BUNDLE_IDS',
 }
 
-export const errorToJson = (error: any) => {
-    if (error.toJSON) {
-        return error.toJSON();
+export class AppWeaverError extends Error {
+    contextName: string;
+    properties: Record<string, any> | undefined;
+    constructor(message: string, contextName: string = 'appweaver.generic', properties?: Record<string, any>) {
+        super(message);
+        this.contextName = contextName;
+        this.properties = properties;
     }
-    if (error instanceof Error) {
+
+    toJson() {
         return {
-            ...error
+            contextName: this.contextName,
+            message: this.message,
+            properties: this.properties
         }
     }
-    if (typeof error === 'object') {
-        return {
-            message: error.message ?? `unknown-error`,
-            ...error
-        }
-    }
-    
-    return {
-        error: JSON.stringify(error)
+}
+
+export class AppWeaverSuccess {
+    message: string;
+    contextName: string;
+    properties: Record<string, any> | undefined;
+
+    constructor(message: string, contextName: string = 'appweaver.success', properties?: Record<string, any>) {
+        this.message = message;
+        this.contextName = contextName;
+        this.properties = properties;
     }
 }

@@ -83,3 +83,13 @@ export const Deactivate = (metadata: any = undefined) => {
         registerMethodDecorator('Deactivate', target, propertyKey as string, metadata);
     }
 }
+
+export type ConfigProviderMetadata = {
+    namespace: string;
+};
+
+export const ConfigProvider = (metadata: ConfigProviderMetadata) => {
+    return (target: any) => {
+        registerClassDecorator('ConfigProvider', target, metadata);
+    }
+}

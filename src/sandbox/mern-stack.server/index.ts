@@ -4,8 +4,8 @@ import { Activate, Inject, Service, SmartContainer, type ServiceMetadata } from 
 import type { EntityManagerInterface, GetManyResults } from "../../persist/decorators";
 import { EntityManagerLCRUDController } from "../../persist/services";
 import { getMongodbConfigFromEnvVars, makeMongodbClientWrapper, type MongodbWrapper } from "./mongo";
-import { getModelDefinitionGuid, Model, Property } from "../../entity/decorators";
-import { getModelDefinitionByGuid, hydrateModelFromData } from "../../entity/services";
+import { getModelDefinitionGuid, Model, Property, type ModelDefinition } from "../../entity/decorators";
+import { getModelDefinitionByGuid } from "../../entity/services";
 import { getClassForGuid } from "../../decorator-registry";
 
 import * as bundleExpressServer from './express';
@@ -34,75 +34,85 @@ export class MongoEntityManager implements EntityManagerInterface {
     async activate(metadata: ServiceMetadata) {
         this.collectionName = metadata.properties?.collection ?? collectionName;
     }
+
+    modelDefCache: Record<string, ModelDefinition> = {};
+
+    getModelDefinition(modelName: string): ModelDefinition {
+        const emid = `${this.collectionName}@${modelName}`;
+        if (!this.modelDefCache[emid]) {
+            // @ts-ignore
+            this.modelDefCache[emid] = getModelDefinitionByGuid(getModelDefinitionGuid(modelName, this.collectionName));
+        }
+        return this.modelDefCache[emid];
+    }
     
     makeModelInstance<EntityModel = any>(modelName: string, initialData?: Record<string, any>): EntityModel {
         const emid = `${this.collectionName}@${modelName}`;
-        const guid = getModelDefinitionGuid(modelName, this.collectionName);
-        const clazz = getClassForGuid(guid);
-        const entity = new clazz();
-        hydrateModelFromData(entity, initialData);
-        return entity;
+
+        return this.getModelDefinition(modelName)?.hydrateEntity(
+            {...initialData ?? {}, [MongoEntityManager.propEntityModelId]: emid }
+        );
     }
 
     async getOne<EntityModel = any>(modelName: string, id: string): Promise<EntityModel> {
         const emid = `${this.collectionName}@${modelName}`;
-        let entity = this.makeModelInstance(modelName);
-        (await this.mongo.mapDocsFrom({
+        const entity =(await this.mongo.mapDocsFrom({
             collection: this.collectionName,
             withFilter: { _id: new ObjectId(id), [MongoEntityManager.propEntityModelId]: emid },
-            mapFn: (doc) => hydrateModelFromData(this.makeModelInstance(modelName), doc),
-        }))[0]
-        const doc = (await this.mongo.getCollection(this.collectionName)).findOne({ _id: new ObjectId(id), [MongoEntityManager.propEntityModelId]: emid });
-        if (!doc) throw new Error(`entity-not-found: ${modelName} @ id=${id}`);
-        entity = hydrateModelFromData(entity, doc);
-        // @todo check if undefined?
+            mapFn: (doc) => this.makeModelInstance(modelName, doc as Record<string, any>),
+        }))[0];
+
+        if (!entity) throw new Error(`entity-not-found: ${modelName} @ id=${id}`);
         return entity;
     }
 
     async getMany<EntityModel = any, Filter = Record<string, any>>(modelName: string, filter: Filter): Promise<GetManyResults<EntityModel>> {
         const emid = `${this.collectionName}@${modelName}`;
+        const modelDef = this.getModelDefinition(modelName);
         const entities = await this.mongo.mapDocsFrom({
             collection: this.collectionName,
             withFilter: {
                 [MongoEntityManager.propEntityModelId]: emid,
                 ...filter,
             },
-            mapFn: (doc) => hydrateModelFromData(this.makeModelInstance(modelName), doc),
+            mapFn: (doc) => modelDef.hydrateEntity(doc as Record<string, any>),
         })
         return { items: entities, modelName };
     }
 
     async create<EntityModel = any>(modelName: string, entity: EntityModel): Promise<EntityModel> {
-        const emid = `${this.collectionName}@${modelName}`;
-        const collection = await this.mongo.getCollection(this.collectionName);
-        const doc = (entity as any);
-        await this.mongo.insertOneValidated({
-            collection: this.collectionName,
-            validated: hydrateModelFromData(this.makeModelInstance(modelName), entity),
-            recordFn: (validated) => {
-                validated[MongoEntityManager.propEntityModelId] = emid;
-                return validated;
-            },
-        })
-        doc[MongoEntityManager.propEntityModelId] = emid;
-        const result = await collection.insertOne(entity as any);
-        // console.log('🟢 MongoEntityManager: create // result', result);
-        doc._id = result.insertedId;
-        return doc;
+        throw new Error("create() not implemented.");
+        // const emid = `${this.collectionName}@${modelName}`;
+        // const collection = await this.mongo.getCollection(this.collectionName);
+        // const doc = (entity as any);
+        // await this.mongo.insertOneValidated({
+        //     collection: this.collectionName,
+        //     validated: hydrateModelFromData(this.makeModelInstance(modelName), entity),
+        //     recordFn: (validated) => {
+        //         validated[MongoEntityManager.propEntityModelId] = emid;
+        //         return validated;
+        //     },
+        // })
+        // doc[MongoEntityManager.propEntityModelId] = emid;
+        // const result = await collection.insertOne(entity as any);
+        // // console.log('🟢 MongoEntityManager: create // result', result);
+        // doc._id = result.insertedId;
+        // return doc;
     }
 
     async update<EntityModel = any>(modelName: string, entity: EntityModel): Promise<EntityModel> {
-        const emid = `${this.collectionName}@${modelName}`;
-        const doc = (entity as any);
-        doc[MongoEntityManager.propEntityModelId] = emid;
-        const collection = await this.mongo.getCollection(this.collectionName);
-        // @todo validate; hydrate
-        const result = await collection.updateOne({ _id: doc._id, [MongoEntityManager.propEntityModelId]: emid }, { $set: doc });
-        return entity;
+        // const emid = `${this.collectionName}@${modelName}`;
+        // const doc = (entity as any);
+        // doc[MongoEntityManager.propEntityModelId] = emid;
+        // const collection = await this.mongo.getCollection(this.collectionName);
+        // // @todo validate; hydrate
+        // const result = await collection.updateOne({ _id: doc._id, [MongoEntityManager.propEntityModelId]: emid }, { $set: doc });
+        // return entity;
+        throw new Error("update() not implemented.");
     }
 
     async delete(modelName: string, id: string): Promise<any> {
-        throw new Error("Method not implemented.");
+        throw new Error("delete() not implemented.");
     }
 }
 

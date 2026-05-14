@@ -1,22 +1,45 @@
 import { profile } from "node:console";
 import { getClassDecoratorMap, getClassForGuid, getGuid, getInheritedClassDecoratorMap, type ClassDecoratorMap } from "../decorator-registry";
-import { EntityDecorators, ValidationError, type EntityValidatorFn, type ModelDefinition, type PropertyMetadata } from "./decorators";
+import { EntityDecorators, EntityValidationError, PropertyValidationError, type EntityValidatorFn, type ModelDefinition, type PropertyMetadata } from "./decorators";
 
 export const passthruDecode = (value: any) => value;
 export const passthruEncode = (value: any) => value;
 
 export const standardPropertyValidation = (value: any, propertyName: string, modelDef: ModelDefinition) => {
-    const { isRequired, isTypeOf } = modelDef.properties[propertyName];
+    const { isRequired, isTypeOf, isArray } = modelDef.properties[propertyName];
     let errors: string[] = [];
+
+    // case: assert isRequired (!undefined && !null)
     if (isRequired && value === undefined || value === null) {
         errors.push(`property-required (actual: undefined OR null)`)
     }
-    if (isTypeOf && !isTypeOf.includes(typeof value)) {
-        errors.push(`property-type-of (expected: [${isTypeOf.join(', ')}], actual: ${typeof value})`)
+
+    let sampleValue = value;
+    // case: assert isArray on value
+    if (isArray) {
+         if (!Array.isArray(value)) {
+            errors.push(`property-array (expected: array, actual: ${typeof value})`);
+         } else {
+            // case: assert isTypeOf on first array value
+            // unsupported: multi-type checking on multiple values: must be done by caller via @Validator if required
+            sampleValue = value[0];
+         }
     }
+
+    // case: since isRequired enforces value !== undefined, we will only check type if value
+    // is not undefined (this allows for optional properties where `null` is an explictly allowed value).
+    // @todo allow `!type` syntax?
+    if (isTypeOf && sampleValue !== undefined) {
+        const stype = typeof sampleValue;
+        if ((!isTypeOf.includes(stype) || !isTypeOf.includes('*'))) {
+            errors.push(`property-typeOf (expected: [${isTypeOf.join(', ')}], actual: ${stype})`)
+        }
+    }
+
     if (errors.length > 0) {
-        return new ValidationError(propertyName, errors.join('; '));
+        return new PropertyValidationError(propertyName, errors.join('; '), modelDef.getModelId());
     }
+
     return undefined;
 };
 
@@ -28,16 +51,19 @@ export const standardPropertyValidation = (value: any, propertyName: string, mod
  * `{ propertyName: {propertyName} }`
  */
 export const standardEntityValidation: EntityValidatorFn = (modelDef, entity) => {
-    const entityId = `${modelDef.collection}@${modelDef.name}`;
-    const errors: ValidationError[] = [];
-    for (const property in modelDef.properties) {
-        const error = modelDef.properties[property].validate(entity[property], property, modelDef);
+    const emid = modelDef.getModelId();
+    const errors: Record<string, any> = {};
+    for (const [propName, propDef] of Object.entries(modelDef.properties)) {
+        const error = propDef.validate(entity[propName], propName, modelDef);
         if (error) {
-            errors.push(error);
+            errors[propName] = error.toJson();
         }
     }
-    if (errors.length == 0) return;
-    return new ValidationError(entityId, 'entity-validation-failed', errors)
+    
+    if (Object.keys(errors).length == 0)
+        return undefined;
+
+    return new EntityValidationError('entity-validation-failed: see properties', emid, errors)
 }
 
 const modelDefCache: Record<string, ModelDefinition> = {};
@@ -48,6 +74,7 @@ const modelDefCache: Record<string, ModelDefinition> = {};
  */
 export const makeModelDefinition = (allDecs: ClassDecoratorMap): ModelDefinition => {
     const modelMeta = allDecs.class[EntityDecorators.Model];
+    const emid = `${modelMeta.collection}@${modelMeta.name}`;
     const propsForDecorator = allDecs.properties[EntityDecorators.Property] ?? {};
     const guid = allDecs.guid;
     
@@ -78,7 +105,6 @@ export const makeModelDefinition = (allDecs: ClassDecoratorMap): ModelDefinition
     }
 
     const hydrateEntity = (fromData: Record<string, any>) => {
-        // console.log('hydrateEntity', guid, getClassForGuid(guid));
         const entity = new (getClassForGuid(guid))();
         for (const property in properties) {
             entity[property] = properties[property].decode(fromData[property], property, modelDef);
@@ -100,6 +126,7 @@ export const makeModelDefinition = (allDecs: ClassDecoratorMap): ModelDefinition
         collection: modelMeta.collection,
         ...modelMeta,
         properties,
+        getModelId: () => emid,
         validateEntity,
         hydrateEntity,
         dehydrateEntity,
@@ -133,21 +160,4 @@ export const getModelDefinitionByGuid = (guid: string) => {
     const clazz = getClassForGuid(guid);
     if (!clazz) return undefined;
     return getModelDefinition(clazz);
-}
-
-/**
- * 
- * @param modelInst A user-supplied @Model instance.
- * @param partialEntityData Typically a JSON object from a datasource. This should match the encoding/decoding standards of the instance.
- * @returns 
- */
-export const hydrateModelFromData = <T = any>(modelInst: any, partialEntityData: any, overrideDef?: ModelDefinition): undefined | T => {
-    const modelDef = overrideDef ?? getModelDefinition(modelInst);
-    if (!modelDef) return undefined;
-
-    for (const property in modelDef.properties) {
-        const propDef = modelDef.properties[property];
-        modelInst[property] = propDef.decode(partialEntityData[property], property, modelDef);
-    }
-    return modelInst as T;
 }

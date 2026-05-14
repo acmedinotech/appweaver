@@ -1,5 +1,5 @@
 import { getClassesForDecorator, getClassDecoratorMap, type ClassDecoratorRecord, type ClassDecoratorMap } from "../decorator-registry";
-import { SVC_LIFECYCLE_DEFAULT, SVC_PRIORITY_DEFAULT } from "./decorators";
+import { ConfigProvider, SVC_LIFECYCLE_DEFAULT, SVC_PRIORITY_DEFAULT } from "./decorators";
 import { type MetadataTransformer, type ServiceFilter, type ServiceFilterComplex, type ServiceMetadata, type ServiceRecord } from "./types";
 import { AWEnvVars } from "../constants";
 
@@ -355,4 +355,8 @@ export class SmartContainer {
         // this.eventBus[bus].on(topic, listener);
         // return () => this.eventBus[bus].off(topic, listener);
     }
+}
+
+@ConfigProvider({ namespace: 'appweaver' })
+export class BaseConfigProvider {
 }

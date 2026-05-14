@@ -1,3 +1,4 @@
+import { AppWeaverError, AppWeaverSuccess } from "../constants";
 import { getClassDecoratorMap, getGuid, getInheritedClassDecoratorMap } from "../decorator-registry";
 import { addMetadataTransformer, type SmartContainer } from "../smart-container";
 import { PostBoot, Service, SVC_PRIORITY_DEFAULT } from "../smart-container/decorators";
@@ -31,6 +32,32 @@ export type ControllerAggregate = {
     controllerMetadata: ControllerMetadata
     routes: {method: string, metadata: RouteMetadata}[];
     middleware: {method: string, metadata: RouteMetadata}[];
+}
+
+export class HttpError extends AppWeaverError {
+    static readonly errorType = 'http.error';
+    constructor(statusCode: number, message: string, properties?: Record<string, any>) {
+        super(message, HttpError.errorType, {statusCode, ...properties});
+    }
+
+    static badRequest(message: string, properties?: Record<string, any>) {
+        return new HttpError(400, message, properties);
+    }
+
+    static forbidden(message: string, properties?: Record<string, any>) {
+        return new HttpError(403, message, properties);
+    }
+
+    static notFound(message: string, properties?: Record<string, any>) {
+        return new HttpError(404, message, properties);
+    }
+
+    static internalServerError(message: string, properties?: Record<string, any>) {
+        return new HttpError(500, message, properties);
+    }
+}
+
+export class HttpSuccess extends AppWeaverSuccess {
 }
 
 /**

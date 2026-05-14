@@ -1,3 +1,4 @@
+import { AppWeaverError } from "../constants";
 import { getClassDecoratorMap, getGuid, registerClassDecorator, registerMethodDecorator, registerPropertyDecorator } from "../decorator-registry";
 
 export enum EntityDecorators {
@@ -40,32 +41,38 @@ export const Model = (metadata: ModelMetadata) => {
     };
 };
 
-export class ValidationError extends Error {
-    static readonly errorType = 'entity.validation-error';
+export class PropertyValidationError extends AppWeaverError {
+    static readonly errorType = 'entity.property.validation-error';
     propertyName: string;
-    payload?: any;
     
-    constructor(property: string, message: string, payload?: any) {
-        super(`${property}: ${message}`);
+    constructor(property: string, message: string, contextName: string = PropertyValidationError.errorType) {
+        super(message, contextName);
         this.propertyName = property;
-        this.payload = payload;
     }
 
-    toJSON() {
+    toJson() {
         return {
-            errorType: ValidationError.errorType,
+            ...super.toJson(),
             propertyName: this.propertyName,
-            message: this.message,
-            payload: this.payload,
         }
     }
 }
+
+export class EntityValidationError extends AppWeaverError {
+    static readonly errorType = 'entity.validation-error';
+    constructor(message: string, contextName: string = EntityValidationError.errorType, properties?: Record<string, any>) {
+        super(message, contextName, properties);
+    }
+}
+
+const _typeof = typeof undefined;
 
 export type PropertyMetadata = {
     name: string;
     isRequired?: boolean;
     isReadOnly?: boolean;
-    isTypeOf?: ('string' | 'number' | 'boolean' | 'object' | 'array' | 'date' | 'function' | 'string' | 'undefined' | 'null' | 'bigint')[];
+    isArray?: boolean;
+    isTypeOf?: (typeof _typeof | '*')[];
     /**
      * Context-dependent value transformation. E.g. a Web form field might display a complex object from a JSON string.
      */
@@ -77,7 +84,7 @@ export type PropertyMetadata = {
     /**
      * Property validation. If undefined, the property is assumed to be valid. Otherwise, passes return value to caller.
      */
-    validate: (value: any, property: string, modelDef: ModelDefinition) => undefined | ValidationError;
+    validate: (value: any, property: string, modelDef: ModelDefinition) => undefined | PropertyValidationError;
 }
 
 /**
@@ -105,10 +112,11 @@ export const Property = (metadata: Partial<PropertyMetadata>) => {
  * @param entity If undefined, convention dictates that `this` is an instance method of a @Model class.
  * @returns 
  */
-export type EntityValidatorFn = (modelDef: ModelDefinition, entity?: any) => undefined | ValidationError;
+export type EntityValidatorFn = (modelDef: ModelDefinition, entity?: any) => undefined | AppWeaverError;
 
 export interface ModelDefinition extends ModelMetadata {
     properties: Record<string, PropertyMetadata>;
+    getModelId: () => string;
     validateEntity: EntityValidatorFn;
     hydrateEntity: (fromData: Record<string, any>) => any;
     dehydrateEntity: (entity: any) => Record<string, any>;
