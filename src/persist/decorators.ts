@@ -27,7 +27,7 @@ export interface EntityManagerInterface {
     makeModelInstance<EntityModel = any>(modelName: string, initialData?: Record<string, any>): EntityModel;
     getOne<EntityModel = any>(modelName: string, id: string): Promise<EntityModel>;
     getMany<EntityModel = any, Filter = Record<string, any>>(modelName: string, filter: Filter): Promise<GetManyResults<EntityModel>>;
-    create<EntityModel = any>(entity: EntityModel): Promise<EntityModel>;
-    update<EntityModel = any>(entity: EntityModel): Promise<EntityModel>;
+    create<EntityModel = any>(modelName: string, entity: EntityModel): Promise<EntityModel>;
+    update<EntityModel = any>(modelName: string, entity: EntityModel): Promise<EntityModel>;
     delete(modelName: string, id: string): Promise<any>;
 }

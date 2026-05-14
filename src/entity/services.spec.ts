@@ -13,25 +13,37 @@ class BaseModel {
 }
 
 describe('entity/services', () => {
+    const baseModelDef = getModelDefinition(new BaseModel()) as ModelDefinition;
     describe('test with BaseModel', () => {
         it('fails standard validation', () => {
-            const entity = hydrateModelFromData(new BaseModel(), { name: undefined, age: undefined });
-            const modelDef = getModelDefinition(entity);
-            const validationError = modelDef?.validateEntity(entity);
+            const entity = baseModelDef.hydrateEntity({ name: undefined, age: undefined });
+            const validationError = baseModelDef.validateEntity(entity);
+
             expect(validationError?.propertyName).toEqual('testCollection@testModel');
             expect(validationError?.message).toEqual('testCollection@testModel: entity-validation-failed');
+
             const payload = (validationError?.payload as ValidationError[])?.
-                map(({propertyName, message}) => ({propertyName, message}));
+                map(({ propertyName, message }) => ({ propertyName, message }));
+
             expect(payload).toMatchObject(
                 [{ propertyName: 'name', message: 'name: property-required (actual: undefined OR null)' },
                 { propertyName: 'age', message: 'age: property-type-of (expected: [number], actual: undefined)' },]
             );
         });
-    
+
         it('hydrates from JSON data', () => {
-            const entity = hydrateModelFromData(new BaseModel(), { name: 'Test', age: 30 });
+            const entity = baseModelDef.hydrateEntity({ name: 'Test', age: 30 });
+
             expect(entity.name).toBe('Test');
             expect(entity.age).toBe(30);
+        });
+
+        it('dehydrates to JSON data', () => {
+            const data = baseModelDef.dehydrateEntity(
+                baseModelDef.hydrateEntity({ name: 'Test', age: 30 })
+            );
+
+            expect(data).toMatchObject({ name: 'Test', age: 30 });
         });
     });
 
@@ -41,9 +53,6 @@ describe('entity/services', () => {
             collection: 'testCollection',
         })
         class ModelWithInstanceValidator extends BaseModel {
-            constructor() {
-                super();
-            }
             @Validator()
             validateEntity(modelDef: ModelDefinition) {
                 if (this.name === 'force-error')
@@ -66,19 +75,19 @@ describe('entity/services', () => {
         }
 
         it('invokes instance validateEntity()', () => {
-            const entity = hydrateModelFromData(new ModelWithInstanceValidator(),
-                { name: 'force-error', age: 30 });
-            const modelDef = getModelDefinition(entity);
-            const validationError = modelDef?.validateEntity(entity);
+            const modelDef = getModelDefinition(ModelWithInstanceValidator) as ModelDefinition;;
+            const entity = modelDef.hydrateEntity({ name: 'force-error', age: 30 });
+            const validationError = modelDef.validateEntity(entity);
+
             expect(validationError?.propertyName).toEqual('model.instanceValidator');
             expect(validationError?.message).toEqual('model.instanceValidator: force-error detected');
         });
 
         it('invokes static validateEntity()', () => {
-            const entity = hydrateModelFromData(new ModelWithStaticValidator(),
-                { name: 'force-error-static', age: 60 });
-            const modelDef = getModelDefinition(entity);
-            const validationError = modelDef?.validateEntity(entity);
+            const modelDef = getModelDefinition(ModelWithStaticValidator) as ModelDefinition;
+            const entity = modelDef.hydrateEntity({ name: 'force-error-static', age: 60 });
+            const validationError = modelDef.validateEntity(entity);
+
             expect(validationError?.propertyName).toEqual('model.staticValidator');
             expect(validationError?.message).toEqual('model.staticValidator: force-error detected');
         });

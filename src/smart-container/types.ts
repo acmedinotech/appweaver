@@ -22,7 +22,7 @@ export type ServiceFilterComplex = {
  */
 export type ServiceFilter = string | ServiceFilterComplex
 
-export const KEY_SVC_META = Symbol('svc.metadata');
+export const KEY_SVC_META = 'svc.metadata';
 
 export type ServiceMetadata = {
     id: string;

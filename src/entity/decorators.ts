@@ -14,8 +14,8 @@ export type ModelMetadata = {
 
 export const DEFAULT_COLLECTION = 'appweaver.default';
 
-const collectionToGuids: Record<string, symbol[]> = {};
-const modelToGuid: Record<string, symbol> = {};
+const collectionToGuids: Record<string, string[]> = {};
+const modelToGuid: Record<string, string> = {};
 
 export const getModelDefinitionGuid = (name: string, collection = DEFAULT_COLLECTION) => modelToGuid[`${collection}@${name}`];
 export const getModelDefinitionsByCollection = (collection = DEFAULT_COLLECTION) => collectionToGuids[collection] ?? [];
@@ -41,28 +41,39 @@ export const Model = (metadata: ModelMetadata) => {
 };
 
 export class ValidationError extends Error {
+    static readonly errorType = 'entity.validation-error';
     propertyName: string;
     payload?: any;
+    
     constructor(property: string, message: string, payload?: any) {
         super(`${property}: ${message}`);
         this.propertyName = property;
         this.payload = payload;
+    }
+
+    toJSON() {
+        return {
+            errorType: ValidationError.errorType,
+            propertyName: this.propertyName,
+            message: this.message,
+            payload: this.payload,
+        }
     }
 }
 
 export type PropertyMetadata = {
     name: string;
     isRequired?: boolean;
-    // @todo isReadOnly?: boolean;
-    isTypeOf?: ('string' | 'number' | 'boolean' | 'object' | 'array' | 'date' | 'function' | 'symbol' | 'undefined' | 'null' | 'bigint')[];
+    isReadOnly?: boolean;
+    isTypeOf?: ('string' | 'number' | 'boolean' | 'object' | 'array' | 'date' | 'function' | 'string' | 'undefined' | 'null' | 'bigint')[];
     /**
      * Context-dependent value transformation. E.g. a Web form field might display a complex object from a JSON string.
      */
-    decode: (value: any, modelDef: ModelDefinition) => any;
+    decode: (value: any, property: string, modelDef: ModelDefinition) => any;
     /**
      * Context-dependent value transformation. E.g. a form handler might convert a complex object to a JSON string.
      */
-    encode: (value: any, modelDef: ModelDefinition) => any;
+    encode: (value: any, property: string, modelDef: ModelDefinition) => any;
     /**
      * Property validation. If undefined, the property is assumed to be valid. Otherwise, passes return value to caller.
      */
@@ -99,4 +110,6 @@ export type EntityValidatorFn = (modelDef: ModelDefinition, entity?: any) => und
 export interface ModelDefinition extends ModelMetadata {
     properties: Record<string, PropertyMetadata>;
     validateEntity: EntityValidatorFn;
+    hydrateEntity: (fromData: Record<string, any>) => any;
+    dehydrateEntity: (entity: any) => Record<string, any>;
 }

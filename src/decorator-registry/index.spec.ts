@@ -57,7 +57,7 @@ describe('decorator-registry', () => {
             .map(([guid, metadata]) => [typeof guid, metadata]);
         expect(classes).toEqual([
             [
-                "symbol",
+                "string",
                 {
                     "name": "BaseClass",
                     "description": "BaseClass-description",
@@ -65,14 +65,14 @@ describe('decorator-registry', () => {
                 }
             ],
             [
-                "symbol",
+                "string",
                 {
                     "name": "ChildOfBaseClass",
                     "description": "ChildOfBaseClass-description"
                 }
             ],
             [
-                "symbol",
+                "string",
                 {
                     "name": "BaseClass2"
                 }

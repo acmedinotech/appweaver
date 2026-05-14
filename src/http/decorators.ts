@@ -41,13 +41,13 @@ export type RouteMetadata = {
 }
 
 export const Middleware = (metadata: RouteMetadata) => {
-    return (target: any, propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
+    return (target: any, propertyKey: string | string, descriptor: PropertyDescriptor) => {
         registerMethodDecorator('http.Middleware', target, propertyKey as string, metadata);
     }
 }
 
 export const Route = (metadata: RouteMetadata) => {
-    return (target: any, propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
+    return (target: any, propertyKey: string | string, descriptor: PropertyDescriptor) => {
         registerMethodDecorator('http.Route', target, propertyKey as string, metadata);
     }
 }

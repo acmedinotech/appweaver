@@ -1,6 +1,6 @@
 import { getClassDecoratorMap, getGuid } from "../decorator-registry";
 import { SmartContainer } from "../smart-container";
-import { Service } from "../smart-container/decorators";
+import { PostBoot, Service } from "../smart-container/decorators";
 import { Controller, Middleware, Route } from "./decorators";
 import { BaseHttpService } from "./services";
 
@@ -14,7 +14,7 @@ const bundleId = 'http.services.test';
 class TestHttpService extends BaseHttpService {
     async postBoot(container: SmartContainer) {
         bootCounter++;
-        console.log('🟢 TestHttpService: postBoot');
+        console.log('🟢 TestHttpService: postBoot', {bootCounter});
         BaseHttpService.gatherControllers(container);
     }
 }
@@ -27,7 +27,7 @@ class TestHttpService extends BaseHttpService {
     priority: 100,
     bundleId
 })
-class TestController {
+class TestController extends TestHttpService {
     @Route({
         path: '/get',
         methods: ['GET'],
@@ -41,6 +41,12 @@ class TestController {
         priority: 70
     })
     deleteTest() {
+    }
+
+    @PostBoot()
+    async postBoot(container: SmartContainer) {
+        // @todo inherit!
+        await super.postBoot(container);
     }
 }
 

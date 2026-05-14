@@ -1,5 +1,5 @@
 import type { Request } from "express";
-import { Controller, Route } from "../http/decorators";
+import { Controller, Middleware, Route } from "../http/decorators";
 import { Inject, Service } from "../library";
 import type { EntityManagerInterface, GetManyResults } from "./decorators";
 import { getModelDefinition } from "../entity/services";
@@ -16,6 +16,7 @@ export class EntityManagerLCRUDController {
     @Route({ path: '/:modelName/{:id}', methods: ['GET'] })
     async doGetOne(request: any, response: any) {
         const { modelName, id } = request.params;
+        console.log('doGetOne', {modelName, id, query: request.query });
         try {
             return response.json(await this.entityManager.getOne(modelName as string, id));
         } catch (error) {
@@ -26,6 +27,7 @@ export class EntityManagerLCRUDController {
     @Route({ path: '/:modelName', methods: ['GET'] })
     async doGetMany(request: Request, response: any) {
         const { modelName } = request.params;
+        console.log('doGetMany', {modelName, query: request.query });
         try {
             return response.json(await this.entityManager.getMany(modelName as string, request.query as Record<string, any>));
         } catch (error) {
@@ -33,13 +35,15 @@ export class EntityManagerLCRUDController {
         }
     }
 
-    @Route({ path: '/:modelName', methods: ['POST'] })
+    @Route({ path: '/:modelName', methods: ['POST'], priority: 50 })
     async doCreate(request: any, response: any) {
         const { modelName } = request.params;
+        console.log('doCreate', {modelName, query: request.query, body: request.body });
         try {
             const entity = this.entityManager.makeModelInstance(modelName as string, request.body);
             return response.json(await this.entityManager.create(entity));
         } catch (error) {
+            console.error('doCreate error', error);
             return response.status(500).json({ error, modelName });
         }
     }

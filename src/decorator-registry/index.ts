@@ -1,14 +1,14 @@
-export const KEY_GUID = Symbol("GUID");
-export const KEY_PARENT_GUID = Symbol("PARENT_GUID");
+export const KEY_GUID = '__GUID__';
+export const KEY_PARENT_GUID = '__PARENT_GUID__';
 export const KEY_PREFIX = "GUID_";
-const EMPTY_GUID = Symbol();
+const EMPTY_GUID = '_';
 
 export type ClassConstructor = any;
 export type Metadata = Record<string, any>;
 export type ClassGetter = () => any
-export type ClassDecoratorRecord = [symbol, Metadata, ClassGetter];
+export type ClassDecoratorRecord = [string, Metadata, ClassGetter];
 export type ClassDecoratorMap = {
-    guid: symbol;
+    guid: string;
     class: Record<string, Metadata>;
     properties: Record<string, Record<string, Metadata>>;
     propertiesStatic: Record<string, Record<string, Metadata>>;
@@ -17,11 +17,11 @@ export type ClassDecoratorMap = {
 }
 
 let classNumber = 0;
-const _classToDecorators: Record<symbol, [string, ClassGetter, Metadata][]> = {};
-const _classToDecoratedObject: Record<symbol, ClassDecoratorMap> = {};
+const _classToDecorators: Record<string, [string, ClassGetter, Metadata][]> = {};
+const _classToDecoratedObject: Record<string, ClassDecoratorMap> = {};
 
-const makeNewGuid = () => Symbol(`${KEY_PREFIX}${classNumber++}`);
-const pushNewRecord = (guid: symbol) => {
+const makeNewGuid = () => `${KEY_PREFIX}-${classNumber++}`;
+const pushNewRecord = (guid: string) => {
     _classToDecorators[guid] = [];
     _classToDecoratedObject[guid] = {
         guid,
@@ -38,9 +38,9 @@ let lastConstructor: any = undefined;
 /**
  * Maps GUIDs to their processed constructors.
  */
-const _guidToClass: Record<symbol, any> = {};
+const _guidToClass: Record<string, any> = {};
 
-export const getClassForGuid = (guid: symbol) => _guidToClass[guid];
+export const getClassForGuid = (guid: string) => _guidToClass[guid];
 
 /**
  * Injects a GUID into the constructor or prototype if GUID initialization is needed.
@@ -87,14 +87,14 @@ const injectGuid = (clazz: any) => {
     return clazz;
 }
 
-const assertObject = (obj: any) => {
-    if (typeof obj !== 'object' || obj === null) {
+const assertFuncOrObj = (obj: any) => {
+    if (typeof obj !== 'function' && typeof obj !== 'object' || obj === null) {
         throw new Error('clazz-not-object');
     }
     return obj;
 }
 
-export const getGuid = (clazz: any) => assertObject((clazz.prototype ?? clazz))[KEY_GUID]
+export const getGuid = (clazz: any) => assertFuncOrObj((clazz.prototype ?? clazz))[KEY_GUID]
 
 export const setAndGetGuid = (clazz: any) => getGuid(injectGuid(clazz))
 
@@ -102,7 +102,7 @@ export const setAndGetGuid = (clazz: any) => getGuid(injectGuid(clazz))
  * @returns List of guids starting from root ancestor.
  */
 export const getGuidInheritanceChain = (clazz: any) => {
-    const guids: symbol[] = [];
+    const guids: string[] = [];
     let ptr = clazz;
     while (ptr) {
         guids.push(getGuid(ptr));
@@ -131,7 +131,7 @@ export const getClassesForDecorator = (decorator: string) => _decoratorToClassse
 
 export const getDecoratorsForClass = (clazz: any) => _classToDecorators[getGuid(clazz)];
 
-export const getClassDecoratorMap = (guid: Symbol): ClassDecoratorMap => _classToDecoratedObject[guid as any]
+export const getClassDecoratorMap = (guid: string): ClassDecoratorMap => _classToDecoratedObject[guid as any]
 
 /**
  * Performs a 2-level merge of decorated class maps a given class and all its ancestors.
@@ -155,7 +155,12 @@ export const getInheritedClassDecoratorMap = (clazz: any, forDecorators?: string
         // @ts-ignore ts being stupid
         const decMap: ClassDecoratorMap = getClassDecoratorMap(guid);
         Object.entries(decMap).forEach(([mapType, value]) => {
-            if (mapType === 'guid' || typeof value !== 'object') return;
+            if (mapType === 'guid') {
+                mergedDecMap[mapType] = value as string;
+                return;
+            } else if (typeof value !== 'object') {
+                return;
+            }
             const decoratorsToCopy = forDecorators ?? Object.keys(value);
             decoratorsToCopy.forEach(decorator => {
                 const map = (mergedDecMap as any)[mapType] ?? {};
@@ -173,7 +178,7 @@ export const getInheritedClassDecoratorMap = (clazz: any, forDecorators?: string
 }
 
 export type PropertyDecoratorRecord = [string, Metadata];
-const _decoratorToClassProps: Record<string, Record<symbol, PropertyDecoratorRecord[]>> = {};
+const _decoratorToClassProps: Record<string, Record<string, PropertyDecoratorRecord[]>> = {};
 export const registerPropertyDecorator = (decorator: string, clazz: any, property: string, metadata: any) => {
     const guid = setAndGetGuid(clazz);
 
@@ -199,7 +204,7 @@ export const getPropertyDecoratorsForClass = (decorator: string, clazz: any) => 
 }
 
 export type MethodDecoratorRecord = [string, Metadata];
-const _decoratorToClassMethods: Record<string, Record<symbol, MethodDecoratorRecord[]>> = {};
+const _decoratorToClassMethods: Record<string, Record<string, MethodDecoratorRecord[]>> = {};
 export const registerMethodDecorator = (decorator: string, clazz: any, method: string, metadata: any) => {
     const guid = setAndGetGuid(clazz);
     

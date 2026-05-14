@@ -46,7 +46,7 @@ export const getServiceMetadata = (target: any) => {
  * @param metadata 
  */
 export const Inject = (filter: ServiceFilter) => {
-    return (target: any, memberKey: string | symbol, descriptor?: PropertyDescriptor) => {
+    return (target: any, memberKey: string | string, descriptor?: PropertyDescriptor) => {
         if (descriptor) {
             registerMethodDecorator('Inject', target, memberKey as string, filter);
         } else {
@@ -62,13 +62,13 @@ export const Inject = (filter: ServiceFilter) => {
  * @returns 
  */
 export const Activate = (metadata: any = undefined) => {
-    return (target: any, propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
+    return (target: any, propertyKey: string | string, descriptor: PropertyDescriptor) => {
         registerMethodDecorator('Activate', target, propertyKey as string, metadata);
     }
 }
 
 export const PostBoot = (metadata: any = undefined) => {
-    return (target: any, propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
+    return (target: any, propertyKey: string | string, descriptor: PropertyDescriptor) => {
         registerMethodDecorator('PostBoot', target, propertyKey as string, metadata);
     }
 }
@@ -79,7 +79,7 @@ export const PostBoot = (metadata: any = undefined) => {
  * @returns 
  */
 export const Deactivate = (metadata: any = undefined) => {
-    return (target: any, propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
+    return (target: any, propertyKey: string | string, descriptor: PropertyDescriptor) => {
         registerMethodDecorator('Deactivate', target, propertyKey as string, metadata);
     }
 }

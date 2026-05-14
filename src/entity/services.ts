@@ -1,8 +1,9 @@
+import { profile } from "node:console";
 import { getClassDecoratorMap, getClassForGuid, getGuid, getInheritedClassDecoratorMap, type ClassDecoratorMap } from "../decorator-registry";
 import { EntityDecorators, ValidationError, type EntityValidatorFn, type ModelDefinition, type PropertyMetadata } from "./decorators";
 
-export const passthruDecode = (value: any, modelDef: ModelDefinition) => value;
-export const passthruEncode = (value: any, modelDef: ModelDefinition) => value;
+export const passthruDecode = (value: any) => value;
+export const passthruEncode = (value: any) => value;
 
 export const standardPropertyValidation = (value: any, propertyName: string, modelDef: ModelDefinition) => {
     const { isRequired, isTypeOf } = modelDef.properties[propertyName];
@@ -48,6 +49,7 @@ const modelDefCache: Record<string, ModelDefinition> = {};
 export const makeModelDefinition = (allDecs: ClassDecoratorMap): ModelDefinition => {
     const modelMeta = allDecs.class[EntityDecorators.Model];
     const propsForDecorator = allDecs.properties[EntityDecorators.Property] ?? {};
+    const guid = allDecs.guid;
     
     const validatorInstMethod = Object.keys(allDecs.methods[EntityDecorators.Validator])[0];
     const validatorStaticMethod = Object.keys(allDecs.methodsStatic[EntityDecorators.Validator])[0];
@@ -75,6 +77,23 @@ export const makeModelDefinition = (allDecs: ClassDecoratorMap): ModelDefinition
         return standardEntityValidation(modelDef, entity);
     }
 
+    const hydrateEntity = (fromData: Record<string, any>) => {
+        // console.log('hydrateEntity', guid, getClassForGuid(guid));
+        const entity = new (getClassForGuid(guid))();
+        for (const property in properties) {
+            entity[property] = properties[property].decode(fromData[property], property, modelDef);
+        }
+        return entity;
+    }
+
+    const dehydrateEntity = (entity: any) => {
+        const data: Record<string, any> = {};
+        for (const property in properties) {
+            data[property] = properties[property].encode(entity[property], property, modelDef);
+        }
+        return data;
+    }
+
     const modelDef: ModelDefinition = {
         // cursor was complaining about name/collection not explicitly defined. why???
         name: modelMeta.name,
@@ -82,6 +101,8 @@ export const makeModelDefinition = (allDecs: ClassDecoratorMap): ModelDefinition
         ...modelMeta,
         properties,
         validateEntity,
+        hydrateEntity,
+        dehydrateEntity,
     }
 
     return modelDef;
@@ -94,17 +115,21 @@ export const makeModelDefinition = (allDecs: ClassDecoratorMap): ModelDefinition
  */
 export const getModelDefinition = (clazz: any) => {
     const guid = getGuid(clazz);
+    const cacheKey = guid;
+
+    // console.log('1. getModelDefinition cacheKey=', cacheKey, '->', modelDefCache[cacheKey], clazz);
+    if (modelDefCache[cacheKey]) return modelDefCache[cacheKey];
+
+    // console.log('2. getModelDefinition get decMap', 'guid=',getGuid(clazz)?.toString());
     const allDecs = getInheritedClassDecoratorMap(clazz, [EntityDecorators.Model, EntityDecorators.Property, EntityDecorators.Validator]);
     if (!allDecs) return;
 
-    const cacheKey = guid.toString();
-    if (modelDefCache[cacheKey]) return modelDefCache[cacheKey];
-
     modelDefCache[cacheKey] = makeModelDefinition(allDecs);
+    // console.log('3. getModelDefinition SET: cacheKey=', cacheKey, '->', modelDefCache[cacheKey]);
     return modelDefCache[cacheKey];
 }
 
-export const getModelDefinitionByGuid = (guid: symbol) => {
+export const getModelDefinitionByGuid = (guid: string) => {
     const clazz = getClassForGuid(guid);
     if (!clazz) return undefined;
     return getModelDefinition(clazz);
@@ -122,7 +147,7 @@ export const hydrateModelFromData = <T = any>(modelInst: any, partialEntityData:
 
     for (const property in modelDef.properties) {
         const propDef = modelDef.properties[property];
-        modelInst[property] = propDef.decode(partialEntityData[property], modelDef);
+        modelInst[property] = propDef.decode(partialEntityData[property], property, modelDef);
     }
     return modelInst as T;
 }

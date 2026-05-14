@@ -77,15 +77,17 @@ export class ExpressServer extends BaseHttpService {
                 console.log('🚀 ExpressServer: mounting', {controllerMethod, rootPath, paths: normPath, methods});
 
                 if (methods.includes('*')) {
-                    console.log('!');
+                    console.log(`🚀 ExpressServer: mount all() on`, normPath);
                     app.all(normPath, (req, res, next) => {
-                        console.log('🚀 ExpressServer: calling', controllerMethod, 'with', req.method, req.path);
+                        // console.log('🚀 ExpressServer: calling', controllerMethod, 'with', req.method, req.path);
                         service[controllerMethod](req, res, next);
                     });
                 } else {
-                    console.log('>');
                     methods.map(m => m.toLowerCase()).forEach((method) => {
-                        app.use(normPath, (req, res, next) => {
+                        console.log(`🚀 ExpressServer: mount ${method}() on`, normPath);
+                        // @ts-ignore
+                        app[method as keyof express.Application](normPath, (req, res, next) => {
+                            // console.log(`🟢 ${method} ${normPath}`);
                             service[controllerMethod](req, res, next);
                         });
                     })
