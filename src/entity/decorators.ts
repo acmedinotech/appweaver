@@ -67,12 +67,31 @@ export class EntityValidationError extends AppWeaverError {
 
 const _typeof = typeof undefined;
 
+/**
+ * Contains a set  of rules for a `@Property` that tooling can use for auto-normalization/validation
+ * against user-supplied data.
+ */
 export type PropertyMetadata = {
     name: string;
+    /** If true, the property is always required before validation. ONLY use this on user-supplied fields.  */
     isRequired?: boolean;
+    /** If true, the property cannot be modified after creation. ONLY use this on user-supplied fields. */
     isReadOnly?: boolean;
+    /** If true and autoCreatedValue set, the property is auto-created by the system at create (conflicts with isRequired/isReadOnly). */
+    isAutoCreated?: boolean;
+    /** If true and autoUpdatedValue set, the property is auto-updated by the system at update (conflicts with isRequired/isReadOnly). */
+    isAutoUpdated?: boolean;
+    /** If true, the property is an array. */
     isArray?: boolean;
+    /** If defined, restricts values to the specified types (`*` allows any type). */
     isTypeOf?: (typeof _typeof | '*')[];
+    /** WIP */
+    relationship?: {
+        type: 'child' | 'parent' | 'ref'
+        isEmbedded?: boolean;
+    }
+    autoCreatedValue?: (propertyKey: string, modelDef: ModelDefinition) => any;
+    autoUpdatedValue?: (propertyKey: string, modelDef: ModelDefinition) => any;
     /**
      * Context-dependent value transformation. E.g. a Web form field might display a complex object from a JSON string.
      */
@@ -108,16 +127,40 @@ export const Property = (metadata: Partial<PropertyMetadata>) => {
 };
 
 /**
- * @param modelDef 
- * @param entity If undefined, convention dictates that `this` is an instance method of a @Model class.
+ * @param entity If undefined, convention dictates that `this` is the entity
+ * @param modelDef If undefined, convention dictates that method contains a default modelDef (or returns undefined)
  * @returns 
  */
-export type EntityValidatorFn = (modelDef: ModelDefinition, entity?: any) => undefined | AppWeaverError;
+export type EntityValidatorFn = (entity?: any, modelDef?: ModelDefinition) => undefined | AppWeaverError;
 
+/**
+ * Provides hydration/validation/dehydration lifecycle management
+ */
 export interface ModelDefinition extends ModelMetadata {
     properties: Record<string, PropertyMetadata>;
     getModelId: () => string;
     validateEntity: EntityValidatorFn;
     hydrateEntity: (fromData: Record<string, any>) => any;
     dehydrateEntity: (entity: any) => Record<string, any>;
+    removeReadOnly: (data: Record<string, any>) => Record<string, any>;
+    /**
+     * Performs secure data enhancement & cleanup as follows::
+     * - inject additional data defined in options.injectData
+     * - if mode=='create': remove all auto-generated properties
+     *   - else: remove all read-only properties
+     * - remove additional properties defined in options.removeKeys
+     */
+    prepareData: (mode: 'create' | 'update', data: any, options?: { injectData?: Record<string, any>; removeKeys?: string[]}) => {
+        /** Persistence-ready user data. */
+        data: Record<string, any>;
+        /** User-supplied key-values that were removed from data. */
+        removed: Record<string, any>;
+    }
+}
+
+export const hydrateAndValidateEntity = (modelDef: ModelDefinition, fromData: Record<string, any>) => {
+    const entity = modelDef.hydrateEntity(fromData);
+    const error = modelDef.validateEntity(entity);
+    if (error) { throw error; }
+    return entity;
 }

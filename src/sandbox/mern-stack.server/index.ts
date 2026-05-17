@@ -1,10 +1,10 @@
-import { MongoClient, ObjectId } from "mongodb";
+import { MongoClient, ObjectId, type Filter } from "mongodb";
 import { Controller, Middleware } from "../../http/decorators";
 import { Activate, Inject, Service, SmartContainer, type ServiceMetadata } from "../../library";
 import type { EntityManagerInterface, GetManyResults } from "../../persist/decorators";
 import { EntityManagerLCRUDController } from "../../persist/services";
 import { getMongodbConfigFromEnvVars, makeMongodbClientWrapper, type MongodbWrapper } from "./mongo";
-import { getModelDefinitionGuid, Model, Property, type ModelDefinition } from "../../entity/decorators";
+import { getModelDefinitionGuid, hydrateAndValidateEntity, Model, Property, type ModelDefinition } from "../../entity/decorators";
 import { getModelDefinitionByGuid } from "../../entity/services";
 import { getClassForGuid } from "../../decorator-registry";
 
@@ -15,10 +15,15 @@ import cookieParser from "cookie-parser";
 export const bundleId = 'appweaver.sandbox.mern-stack';
 export const idEntityManager = `${bundleId}.mongoEntityManager`;
 export const collectionName = 'mern-stack.sandbox';
+export const PROP_ENTITY_MODEL_ID = '_entityModelId';
 
-@Service({ id: idEntityManager, bundleId, properties: {
-    collection: collectionName,
-} })
+export const PROP_SYS_MANAGED_KEYS = ['_entityModelId', '_ownerId'];
+
+@Service({
+    id: idEntityManager, bundleId, properties: {
+        collection: collectionName,
+    }
+})
 export class MongoEntityManager implements EntityManagerInterface {
     static readonly propEntityModelId = '_entityModelId';
     readonly mongo: MongodbWrapper;
@@ -45,74 +50,83 @@ export class MongoEntityManager implements EntityManagerInterface {
         }
         return this.modelDefCache[emid];
     }
-    
-    makeModelInstance<EntityModel = any>(modelName: string, initialData?: Record<string, any>): EntityModel {
-        const emid = `${this.collectionName}@${modelName}`;
 
+    makeModelInstance<EntityModel = any>(modelName: string, initialData?: Record<string, any>): EntityModel {
         return this.getModelDefinition(modelName)?.hydrateEntity(
-            {...initialData ?? {}, [MongoEntityManager.propEntityModelId]: emid }
+            { ...initialData ?? {}, [MongoEntityManager.propEntityModelId]: `${this.collectionName}@${modelName}` }
         );
     }
 
-    async getOne<EntityModel = any>(modelName: string, id: string): Promise<EntityModel> {
-        const emid = `${this.collectionName}@${modelName}`;
-        const entity =(await this.mongo.mapDocsFrom({
-            collection: this.collectionName,
-            withFilter: { _id: new ObjectId(id), [MongoEntityManager.propEntityModelId]: emid },
-            mapFn: (doc) => this.makeModelInstance(modelName, doc as Record<string, any>),
-        }))[0];
+    makeEntityPropsFor({ _id, modelName }: { _id?: any, modelName: string }, optionalData: Record<string, any> = {}): Record<string, any> {
+        const map: Record<string, any> = {
+            ...optionalData,
+            [PROP_ENTITY_MODEL_ID]: `${this.collectionName}@${modelName}`,
+        }
+        if (_id) {
+            map['_id'] = typeof _id === 'string' ? new ObjectId(_id) : _id;
+        }
+        return map;
+    }
 
-        if (!entity) throw new Error(`entity-not-found: ${modelName} @ id=${id}`);
-        return entity;
+    async getOne<EntityModel = any>(modelName: string, _id: string, withFilter: any = {}): Promise<EntityModel> {
+        return (
+            await this.getMany(modelName,
+                this.makeEntityPropsFor({ _id, modelName }, withFilter))
+        )
+            .items[0] as EntityModel;
     }
 
     async getMany<EntityModel = any, Filter = Record<string, any>>(modelName: string, filter: Filter): Promise<GetManyResults<EntityModel>> {
-        const emid = `${this.collectionName}@${modelName}`;
         const modelDef = this.getModelDefinition(modelName);
         const entities = await this.mongo.mapDocsFrom({
             collection: this.collectionName,
-            withFilter: {
-                [MongoEntityManager.propEntityModelId]: emid,
-                ...filter,
+            withFilter: this.makeEntityPropsFor({ modelName }, filter ?? {}),
+            afterFind: (cursor, docs) => {
+                // console.log('🟢 getMany.afterFind // cursor', cursor, ' // ', docs);
             },
-            mapFn: (doc) => modelDef.hydrateEntity(doc as Record<string, any>),
+            mapTo: (doc) => modelDef.hydrateEntity(doc as Record<string, any>),
         })
+
         return { items: entities, modelName };
     }
 
-    async create<EntityModel = any>(modelName: string, entity: EntityModel): Promise<EntityModel> {
-        throw new Error("create() not implemented.");
-        // const emid = `${this.collectionName}@${modelName}`;
-        // const collection = await this.mongo.getCollection(this.collectionName);
-        // const doc = (entity as any);
-        // await this.mongo.insertOneValidated({
-        //     collection: this.collectionName,
-        //     validated: hydrateModelFromData(this.makeModelInstance(modelName), entity),
-        //     recordFn: (validated) => {
-        //         validated[MongoEntityManager.propEntityModelId] = emid;
-        //         return validated;
-        //     },
-        // })
-        // doc[MongoEntityManager.propEntityModelId] = emid;
-        // const result = await collection.insertOne(entity as any);
-        // // console.log('🟢 MongoEntityManager: create // result', result);
-        // doc._id = result.insertedId;
-        // return doc;
+    async create<EntityModel = any>(modelName: string, userData: any, withProps: Record<string, any> = {}): Promise<EntityModel> {
+        const modelDef = this.getModelDefinition(modelName);
+        const { data } = modelDef.prepareData('create', userData, {
+            injectData: this.makeEntityPropsFor({ modelName }, withProps),
+        })
+
+        const entity = hydrateAndValidateEntity(modelDef, data)
+        const result = await this.mongo.insertOne({
+            collection: this.collectionName,
+            record: data
+        })
+
+        return { ...entity, ...result };
     }
 
-    async update<EntityModel = any>(modelName: string, entity: EntityModel): Promise<EntityModel> {
-        // const emid = `${this.collectionName}@${modelName}`;
-        // const doc = (entity as any);
-        // doc[MongoEntityManager.propEntityModelId] = emid;
-        // const collection = await this.mongo.getCollection(this.collectionName);
-        // // @todo validate; hydrate
-        // const result = await collection.updateOne({ _id: doc._id, [MongoEntityManager.propEntityModelId]: emid }, { $set: doc });
-        // return entity;
-        throw new Error("update() not implemented.");
+    async update<EntityModel = any>(modelName: string, userData: any, withConstraints: any = {}): Promise<EntityModel> {
+        const modelDef = this.getModelDefinition(modelName);
+        const { data, removed } = modelDef.prepareData('update', userData, {
+            removeKeys: PROP_SYS_MANAGED_KEYS,
+        });
+
+        const { _id } = removed
+        await this.mongo.updateOne({
+            collection: this.collectionName,
+            withFilter: this.makeEntityPropsFor({ _id, modelName }, withConstraints),
+            record: data
+        })
+
+        return { _id, ...data } as EntityModel;
     }
 
-    async delete(modelName: string, id: string): Promise<any> {
-        throw new Error("delete() not implemented.");
+    async delete(modelName: string, _id: string, withConstraints: any = {}): Promise<any> {
+        const result = await this.mongo.deleteOne({
+            collection: this.collectionName,
+            withFilter: this.makeEntityPropsFor({ _id, modelName }, withConstraints),
+        })
+        return result;
     }
 }
 
@@ -120,37 +134,39 @@ export class MongoEntityManager implements EntityManagerInterface {
 @Controller({ rootPath: '/api/sandbox/mern-stack/entities', isSubApp: true })
 export class MernStackController extends EntityManagerLCRUDController {
     @Inject(idEntityManager)
-    entityManager: MongoEntityManager = undefined as unknown as MongoEntityManager;
+    entityManager: EntityManagerInterface = undefined as unknown as MongoEntityManager;
     parseJson = express.json();
     parseCookies = cookieParser();
 
     @Middleware({ priority: 100, methods: ['POST', 'PUT', 'PATCH'], path: /.+/ })
     async doParseJson(request: express.Request, response: express.Response, next: NextFunction) {
-        this.parseJson(request, response, (err?:any) => {
-            console.log('🟢 MernStackController: parseJsonBody // ', err, request.body);
+        this.parseJson(request, response, (err?: any) => {
             next(err);
         });
     }
 
     @Middleware({ priority: 100, methods: ['*'], path: /.+/ })
     async doParseCookies(request: express.Request, response: express.Response, next: NextFunction) {
-        this.parseCookies(request, response, (err?:any) => {
-            console.log('🟢 MernStackController: parseCookies // ', err, request.cookies);
+        this.parseCookies(request, response, (err?: any) => {
             next(err);
         });
     }
 }
 
-@Model({name: 'user', collection: collectionName})
+@Model({ name: 'user', collection: collectionName })
 class User {
-    @Property({isReadOnly: true})
-    _id = undefined as any;
+    @Property({ isAutoCreated: true })
+    readonly _id = undefined as any;
     @Property({ isRequired: true })
-    username = undefined as unknown as string;
+    readonly username = undefined as unknown as string;
+    @Property({ isAutoCreated: true, autoCreatedValue: () => new Date() })
+    readonly createdAt = undefined as unknown as Date;
+    @Property({ isAutoUpdated: true, autoUpdatedValue: () => new Date() })
+    readonly updatedAt = undefined as unknown as Date;
 }
 
-const container = new SmartContainer({  
-    bundleIds: { 
+const container = new SmartContainer({
+    bundleIds: {
         [bundleId]: true,
         [bundleExpressServer.bundleId]: true
     },

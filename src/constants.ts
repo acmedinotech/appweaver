@@ -5,6 +5,13 @@ export enum AWEnvVars {
     BUNDLE_IDS = 'BUNDLE_IDS',
 }
 
+export type AppWeaverErrorInterface = {
+    message: string;
+    contextName: string;
+    properties?: Record<string, any>;
+    toJson: () => Record<string, any>;
+}
+
 export class AppWeaverError extends Error {
     contextName: string;
     properties: Record<string, any> | undefined;
@@ -20,17 +27,5 @@ export class AppWeaverError extends Error {
             message: this.message,
             properties: this.properties
         }
-    }
-}
-
-export class AppWeaverSuccess {
-    message: string;
-    contextName: string;
-    properties: Record<string, any> | undefined;
-
-    constructor(message: string, contextName: string = 'appweaver.success', properties?: Record<string, any>) {
-        this.message = message;
-        this.contextName = contextName;
-        this.properties = properties;
     }
 }

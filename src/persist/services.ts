@@ -3,6 +3,9 @@ import { Controller, Middleware, Route } from "../http/decorators";
 import { Inject, Service } from "../library";
 import type { EntityManagerInterface, GetManyResults } from "./decorators";
 import { getModelDefinition } from "../entity/services";
+import { HttpError } from "../http/services";
+import { EntityValidationError } from "../entity/decorators";
+import { AppWeaverError } from "../constants";
 
 @Controller({ rootPath: '/_dangerous_override', isSubApp: true })
 @Service({ id: 'entityManagerLCRUDController.abstract' })
@@ -40,33 +43,52 @@ export class EntityManagerLCRUDController {
         const { modelName } = request.params;
         console.log('doCreate', {modelName, query: request.query, body: request.body });
         try {
-            const entity = this.entityManager.makeModelInstance(modelName as string, request.body);
-            return response.json(await this.entityManager.create(entity));
+            return response.json(await this.entityManager.create(modelName, request.body));
         } catch (error) {
-            console.error('doCreate error', error);
-            return response.status(500).json({ error, modelName });
+            return EntityManagerLCRUDController.returnErrorResponse(error, request, response, modelName);
         }
     }
 
     @Route({ path: '/:modelName/:id', methods: ['PUT'] })
     async doUpdate(request: any, response: any) {
-        const { modelName, id } = request.params;
+        const { modelName, id: _id } = request.params;
         try {
-            const entity = this.entityManager.makeModelInstance(modelName as string, { id, ...request.body });
-            const modelDef = getModelDefinition(entity);
-            if (!modelDef) { throw new Error('invalid-model-definition')}
-            const validationError = modelDef.validateEntity(entity);
-            if (validationError) {
-                throw validationError;
-            }
-            return response.json(await this.entityManager.update(entity));
+            const data = request.body;
+            // @todo inject filter from request query
+            const entity = await this.entityManager.getOne(modelName, _id);
+            if (!entity) { throw HttpError.notFound('entity-not-found', { path: request.path, modelName, id: _id }); }
+            
+            return response.json(await this.entityManager.update(modelName, {...data, _id}, {_id}));
+        } catch (error) {
+            return EntityManagerLCRUDController.returnErrorResponse(error, request, response, modelName, _id);
+        }
+    }
+
+    @Route({ path: '/:modelName/{:id}', methods: ['DELETE'] })
+    async doDeleteOne(request: any, response: any) {
+        const { modelName, id } = request.params;
+        console.log('doDeleteOne', {modelName, id, query: request.query });
+        try {
+            const result = await this.entityManager.delete(modelName, id);
+            if (result.deletedCount === 0) { throw HttpError.notFound('entity-not-found', { path: request.path, modelName, id }); }
+            return response.json(result);
         } catch (error) {
             return response.status(500).json({ error, modelName, id });
         }
     }
 
-    @Route({ path: '/:modelName/:id', methods: ['DELETE'] })
-    doDelete(request: any, response: any) {
-
+    static returnErrorResponse(error: any, request: any, response: any, modelName: string, id?: string) {
+        if (error instanceof AppWeaverError) {
+            const payload = error.toJson();
+            const statusCode = payload.properties?.['statusCode'] ?? (error instanceof EntityValidationError ? 400 : 500);
+            return response.status(statusCode).json({ error: payload });
+        }
+        console.error('🚨 unhandled-error', request.method, request.path, error);
+        return response.status(500).json({ error: {
+            message: `unhandled-error: ${error?.message}`,
+            path: request.path, 
+            modelName,
+            id,
+        }} );
     }
 }

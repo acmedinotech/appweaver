@@ -1,4 +1,4 @@
-import type { Collection, Db, Filter, FindCursor, UpdateFilter } from "mongodb";
+import type { Collection, Db, DeleteResult, Filter, FindCursor, UpdateFilter } from "mongodb";
 import { MongoClient } from "mongodb";
 import { APPWEAVER_ENV_PREFIX } from "../../constants";
 
@@ -64,36 +64,28 @@ export type MongodbWrapper = {
     getDocsFrom: <DocType = unknown>(params: {
         collection: string;
         withFilter: Filter<Document>;
-        validateDocsFn?: (docs: DocType[]) => void;
+        afterFind?: (cursor: FindCursor, docs: Document[]) => void;
     }) => Promise<DocType[]>;
     mapDocsFrom: <DocType = unknown, EntityType = unknown>(params: {
         collection: string;
         withFilter: Filter<Document>;
-        validateDocsFn?: (docs: DocType[]) => void;
-        mapFn: (doc: DocType) => EntityType;
+        afterFind?: (cursor: FindCursor, docs: Document[]) => void;
+        mapTo: (doc: DocType) => EntityType;
     }) => Promise<EntityType[]>;
-    insertOne: <T = unknown>(params: {
+    insertOne: <T = Record<string, any>>(params: {
         collection: string;
         record: T;
     }) => Promise<T>;
-    insertOneValidated: <T = unknown>(params: {
-        collection: string;
-        validated: T;
-        recordFn: (validated: T) => T;
-    }) => Promise<T>;
-    updateOne: <T = unknown>(params: {
+    updateOne: <T = Record<string, any>>(params: {
         collection: string;
         withFilter: UpdateFilter<Document>;
         upsert?: boolean;
         record: T;
     }) => Promise<T>;
-    updateOneValidated: <T = unknown>(params: {
+    deleteOne: (params: {
         collection: string;
         withFilter: UpdateFilter<Document>;
-        upsert?: boolean;
-        validated: T;
-        recordFn: (validated: T) => T;
-    }) => Promise<T>;
+    }) => Promise<DeleteResult>;
 };
 
 export const getDbSuffix = () =>
@@ -117,51 +109,53 @@ export const makeMongodbClientWrapper = (client: MongoClient, config: MongodbCon
         return dbPtr;
     };
 
-    let afterFind: undefined | ((cursor: FindCursor, docs: Document[]) => void);
+    // let afterFind: undefined | ((cursor: FindCursor, docs: Document[]) => void);
     const me: MongodbWrapper = {
         setAfterFindListener: (_after) => {
-            afterFind = _after;
+            // afterFind = _after;
             return me;
         },
         getDb,
         getClient: () => client,
         getCollection: async (collName) =>
             (await getDb()).collection(collName),
+
         getDocsFrom: async <D = unknown>({
             collection,
             withFilter,
-            validateDocsFn,
+            afterFind,
         }: {
             collection: string;
             withFilter: Filter<Document>;
-            validateDocsFn?: (docs: D[]) => void;
+            afterFind?: (cursor: FindCursor, docs: Document[]) => void;
         }): Promise<D[]> => {
             const cursor = await (
                 await me.getCollection(collection)
             ).find(withFilter, { batchSize: 1 });
             const docs = await (cursor.toArray() as Promise<D[]>);
-            validateDocsFn?.(docs);
             afterFind?.(cursor, docs as Document[]);
             return docs;
         },
+
         mapDocsFrom: async <D = unknown, T = unknown>({
             collection,
             withFilter,
-            validateDocsFn,
-            mapFn,
+            afterFind,
+            mapTo = (doc) => doc as any,
         }: {
             collection: string;
             withFilter: Filter<Document>;
-            validateDocsFn?: (docs: D[]) => void;
-            mapFn: (doc: D) => T;
+            mapTo: (doc: D) => T;
+            afterFind?: (cursor: FindCursor, docs: Document[]) => void;
         }) =>
             (
                 await me.getDocsFrom<D>({
                     collection,
                     withFilter,
-                    validateDocsFn,
+                    afterFind,
                 })
-            ).map(mapFn) as T[],
+            ).map(mapTo) as T[],
+        
         insertOne: async <T = unknown>({
             collection,
             record,
@@ -181,20 +175,7 @@ export const makeMongodbClientWrapper = (client: MongoClient, config: MongodbCon
                 )} ;; record=${JSON.stringify(record)}`
             );
         },
-        insertOneValidated: async <T>({
-            collection,
-            validated,
-            recordFn,
-        }: {
-            collection: string;
-            validated: T;
-            recordFn: (validated: T) => T;
-        }) => {
-            return await me.insertOne<T>({
-                collection,
-                record: recordFn(validated),
-            });
-        },
+        
         updateOne: async <T>({
             collection,
             withFilter,
@@ -205,33 +186,21 @@ export const makeMongodbClientWrapper = (client: MongoClient, config: MongodbCon
             record: T;
         }) => {
             await (
+                console.log('🟢 updateOne // withFilter', withFilter, {record}),
                 await me.getCollection(collection)
             ).updateOne(withFilter, {
                 $set: record,
             } as any);
             return record;
         },
-        updateOneValidated: async <T>({
+        deleteOne: async({
             collection,
             withFilter,
-            upsert,
-            validated,
-            recordFn,
         }: {
             collection: string;
             withFilter: UpdateFilter<Document>;
-            upsert?: boolean;
-            validated: T;
-            recordFn: (validated: T) => T;
-        }) => {
-            const record = recordFn(validated);
-            return await me.updateOne<T>({
-                collection,
-                withFilter,
-                upsert,
-                record,
-            });
-        },
+        }) => await (await me.getCollection(collection))
+            .deleteOne(withFilter),
     };
     return me;
 };

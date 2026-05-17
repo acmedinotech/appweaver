@@ -24,10 +24,10 @@ export type GetManyResults<EntityModel = any> = {
  * Fetch and save entities to an underlying datastore. Utilizes **`entity`** decorators for validation and hydration.
  */
 export interface EntityManagerInterface {
-    makeModelInstance<EntityModel = any>(modelName: string, initialData?: Record<string, any>): EntityModel;
-    getOne<EntityModel = any>(modelName: string, id: string): Promise<EntityModel>;
+    makeModelInstance<EntityModel = any>(modelName: string, data?: Record<string, any>): EntityModel;
+    getOne<EntityModel = any, Filter = any>(modelName: string, id: string, filter?: Filter): Promise<EntityModel>;
     getMany<EntityModel = any, Filter = Record<string, any>>(modelName: string, filter: Filter): Promise<GetManyResults<EntityModel>>;
     create<EntityModel = any>(modelName: string, entity: EntityModel): Promise<EntityModel>;
-    update<EntityModel = any>(modelName: string, entity: EntityModel): Promise<EntityModel>;
-    delete(modelName: string, id: string): Promise<any>;
+    update<EntityModel = any, Filter = any>(modelName: string, entity: EntityModel, filter?: Filter): Promise<EntityModel>;
+    delete<Filter = any>(modelName: string, id: string, filter?: Filter): Promise<any>;
 }

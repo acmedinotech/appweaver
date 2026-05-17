@@ -1,4 +1,4 @@
-import { AppWeaverError, AppWeaverSuccess } from "../constants";
+import { AppWeaverError } from "../constants";
 import { getClassDecoratorMap, getGuid, getInheritedClassDecoratorMap } from "../decorator-registry";
 import { addMetadataTransformer, type SmartContainer } from "../smart-container";
 import { PostBoot, Service, SVC_PRIORITY_DEFAULT } from "../smart-container/decorators";
@@ -55,9 +55,6 @@ export class HttpError extends AppWeaverError {
     static internalServerError(message: string, properties?: Record<string, any>) {
         return new HttpError(500, message, properties);
     }
-}
-
-export class HttpSuccess extends AppWeaverSuccess {
 }
 
 /**
