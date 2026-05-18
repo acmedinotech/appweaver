@@ -1,8 +1,8 @@
 import { MongoClient, ObjectId, type Filter } from "mongodb";
 import { Controller, Middleware } from "../../http/decorators";
 import { Activate, Inject, Service, SmartContainer, type ServiceMetadata } from "../../library";
-import type { EntityManagerInterface, GetManyResults } from "../../persist/decorators";
-import { EntityManagerLCRUDController } from "../../persist/services";
+import type { EntityCollectionManagerInterface, GetManyResults } from "../../persist/decorators";
+import { CollectionManagerLCRUDController as CollectionManagerAPIController } from "../../persist/services";
 import { getMongodbConfigFromEnvVars, makeMongodbClientWrapper, type MongodbWrapper } from "./mongo";
 import { getModelDefinitionGuid, hydrateAndValidateEntity, Model, Property, type ModelDefinition } from "../../entity/decorators";
 import { getModelDefinitionByGuid } from "../../entity/services";
@@ -11,6 +11,7 @@ import { getClassForGuid } from "../../decorator-registry";
 import * as bundleExpressServer from './express';
 import express, { type NextFunction } from 'express';
 import cookieParser from "cookie-parser";
+import { randomUUID } from "node:crypto";
 
 export const bundleId = 'appweaver.sandbox.mern-stack';
 export const idEntityManager = `${bundleId}.mongoEntityManager`;
@@ -24,7 +25,7 @@ export const PROP_SYS_MANAGED_KEYS = ['_entityModelId', '_ownerId'];
         collection: collectionName,
     }
 })
-export class MongoEntityManager implements EntityManagerInterface {
+export class MongoEntityManager implements EntityCollectionManagerInterface {
     static readonly propEntityModelId = '_entityModelId';
     readonly mongo: MongodbWrapper;
     // we're associating the modelCollection with the persistent collection
@@ -132,24 +133,46 @@ export class MongoEntityManager implements EntityManagerInterface {
 
 @Service({ id: `${bundleId}.mernStackController.api`, bundleId })
 @Controller({ rootPath: '/api/sandbox/mern-stack/entities', isSubApp: true })
-export class MernStackController extends EntityManagerLCRUDController {
+export class MernStackController extends CollectionManagerAPIController {
     @Inject(idEntityManager)
-    entityManager: EntityManagerInterface = undefined as unknown as MongoEntityManager;
+    entityManager: EntityCollectionManagerInterface = undefined as unknown as MongoEntityManager;
     parseJson = express.json();
     parseCookies = cookieParser();
+    secretKeyAuthHack: string;
 
-    @Middleware({ priority: 100, methods: ['POST', 'PUT', 'PATCH'], path: /.+/ })
+    constructor() {
+        super();
+        this.secretKeyAuthHack = randomUUID();
+        console.log('⚠️ MernStackController: authHack secret key', this.secretKeyAuthHack);
+    }
+
+    getRequestUserData(request: any) {
+        return (request as any).authHack ?? {};
+    }
+
+    @Middleware({ priority: 100, path: /.+/ })
     async doParseJson(request: express.Request, response: express.Response, next: NextFunction) {
         this.parseJson(request, response, (err?: any) => {
             next(err);
         });
     }
 
-    @Middleware({ priority: 100, methods: ['*'], path: /.+/ })
+    @Middleware({ priority: 100, path: /.+/ })
     async doParseCookies(request: express.Request, response: express.Response, next: NextFunction) {
         this.parseCookies(request, response, (err?: any) => {
             next(err);
         });
+    }
+
+    @Middleware({ priority: 100, path: /.+/ })
+    async doAuthHack(request: express.Request, response: express.Response, next: NextFunction) {
+        if (request.headers['x-auth-hack'] === this.secretKeyAuthHack) {
+            (request as any).authHack = {
+                userId: 'auth-hack'
+            }
+        }
+
+        next();
     }
 }
 

@@ -66,7 +66,22 @@ export class ExpressServer extends BaseHttpService {
             const { rootPath = '', isSubApp } = controller.controllerMetadata;
             const app = this.getAppForRootPath(rootPath, isSubApp);
 
-            [...controller.middleware, ...controller.routes].forEach((route) => {
+            controller.middleware.forEach((route) => {
+                if (route.metadata.disabled) return;
+                
+                const { path = '/', paths = [], methods = ['GET'] } = route.metadata;
+                // prefer paths if not empty
+                const normPath = paths.length ? paths : path;
+                const controllerMethod = route.method;
+
+                console.log('🚀 ExpressServer: middleware', {controllerMethod, rootPath, paths: normPath, methods});
+
+                app.use(normPath, (req, res, next) => {
+                    service[controllerMethod](req, res, next);
+                });
+            });
+
+            controller.routes.forEach((route) => {
                 if (route.metadata.disabled) return;
                 
                 const { path = '/', paths = [], methods = ['GET'] } = route.metadata;

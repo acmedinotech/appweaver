@@ -179,6 +179,7 @@ export const getInheritedClassDecoratorMap = (clazz: any, forDecorators?: string
 
 export type PropertyDecoratorRecord = [string, Metadata];
 const _decoratorToClassProps: Record<string, Record<string, PropertyDecoratorRecord[]>> = {};
+// @todo add options arg
 export const registerPropertyDecorator = (decorator: string, clazz: any, property: string, metadata: any) => {
     const guid = setAndGetGuid(clazz);
 
@@ -205,6 +206,7 @@ export const getPropertyDecoratorsForClass = (decorator: string, clazz: any) => 
 
 export type MethodDecoratorRecord = [string, Metadata];
 const _decoratorToClassMethods: Record<string, Record<string, MethodDecoratorRecord[]>> = {};
+// @todo add options arg
 export const registerMethodDecorator = (decorator: string, clazz: any, method: string, metadata: any) => {
     const guid = setAndGetGuid(clazz);
     

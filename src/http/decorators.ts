@@ -32,22 +32,43 @@ export const Controller = (metadata: ControllerMetadata = {
     }
 }
 
-export type RouteMetadata = {
+export type MiddlewareMetadata = {
     path?: string | RegExp;
     paths?: (string | RegExp)[];
     priority?: number;
-    methods?: string[];
     disabled?: boolean;
 }
 
-export const Middleware = (metadata: RouteMetadata) => {
+export type RouteMetadata = MiddlewareMetadata & {
+    methods?: string[];
+}
+
+export const Middleware = (metadata: MiddlewareMetadata) => {
     return (target: any, propertyKey: string | string, descriptor: PropertyDescriptor) => {
         registerMethodDecorator('http.Middleware', target, propertyKey as string, metadata);
     }
 }
 
+/** METHOD DECORATOR: @Route */
 export const Route = (metadata: RouteMetadata) => {
     return (target: any, propertyKey: string | string, descriptor: PropertyDescriptor) => {
         registerMethodDecorator('http.Route', target, propertyKey as string, metadata);
     }
 }
+
+/** METHOD DECORATOR: @GET (alias to @Route) */
+export const GET = (metadata: Exclude<RouteMetadata, 'methods'>) => Route({ ...metadata, methods: ['GET'] });
+/** METHOD DECORATOR: @HEAD (alias to @Route) */
+export const HEAD = (metadata: Exclude<RouteMetadata, 'methods'>) => Route({ ...metadata, methods: ['HEAD'] });
+/** METHOD DECORATOR: @OPTIONS (alias to @Route) */
+export const OPTIONS = (metadata: Exclude<RouteMetadata, 'methods'>) => Route({ ...metadata, methods: ['OPTIONS'] });
+/** METHOD DECORATOR: @TRACE (alias to @Route) */
+export const TRACE = (metadata: Exclude<RouteMetadata, 'methods'>) => Route({ ...metadata, methods: ['OPTIONS'] });
+/** METHOD DECORATOR: @POST (alias to @Route) */
+export const POST = (metadata: Exclude<RouteMetadata, 'methods'>) => Route({ ...metadata, methods: ['POST'] });
+/** METHOD DECORATOR: @PUT (alias to @Route) */
+export const PUT = (metadata: Exclude<RouteMetadata, 'methods'>) => Route({ ...metadata, methods: ['PUT'] });
+/** METHOD DECORATOR: @PATCH (alias to @Route) */
+export const PATCH = (metadata: Exclude<RouteMetadata, 'methods'>) => Route({ ...metadata, methods: ['PATCH'] });
+/** METHOD DECORATOR: @DELETE (alias to @Route) */
+export const DELETE = (metadata: Exclude<RouteMetadata, 'methods'>) => Route({ ...metadata, methods: ['DELETE'] });
