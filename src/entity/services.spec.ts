@@ -22,7 +22,6 @@ describe('entity/services', () => {
         it('fails standard validation', () => {
             const entity = baseModelDef.hydrateEntity({ name: undefined, age: undefined, streetAddresses: undefined, ages: ['a'] });
             const validationError = baseModelDef.validateEntity(entity);
-
             expect(validationError?.toJson()).toEqual({
                 "contextName": "testCollection@testModel",
                 "message": "entity-validation-failed: see properties",
@@ -108,11 +107,29 @@ describe('entity/services', () => {
             const modelDef = getModelDefinition(ModelWithStaticValidator) as ModelDefinition;
             const entity = modelDef.hydrateEntity({ name: 'force-error-static', age: 60 });
             const validationError = modelDef.validateEntity(entity);
-
             expect(validationError?.toJson()).toEqual({
-                "contextName": "entity.property.validation-error",
-                "message": "force-error detected",
-                "propertyName": "model.staticValidator"
+                contextName: 'testCollection@model.staticValidator',
+                message: 'entity-validation-failed: see properties',
+                properties: {
+                    age: {
+                        contextName: 'testCollection@model.staticValidator',
+                        message: 'property-typeOf (expected: [number], actual: number)',
+                        properties: undefined,
+                        propertyName: 'age'
+                    },
+                    streetAddresses: {
+                        contextName: 'testCollection@model.staticValidator',
+                        message: 'property-array (expected: array, actual: undefined)',
+                        properties: undefined,
+                        propertyName: 'streetAddresses'
+                    },
+                    ages: {
+                        contextName: 'testCollection@model.staticValidator',
+                        message: 'property-array (expected: array, actual: undefined)',
+                        properties: undefined,
+                        propertyName: 'ages'
+                    }
+                }
             });
         });
     });

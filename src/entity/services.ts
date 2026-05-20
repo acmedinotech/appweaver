@@ -147,8 +147,8 @@ export const makeModelDefinition = (allDecs: ClassDecoratorMap): ModelDefinition
             decode,
             encode,
             validate: (value: any, propDefName) => {
-                console.log('🟢 validate: propDefName', propDefName, ' // property', property, { value });
-                return standardPropertyValidation(value, propDefName ?? property, modelDef) ?? validateFn(value, property, modelDef);
+                return standardPropertyValidation(value, propDefName ?? property, modelDef) 
+                    ?? validateFn(value, property, modelDef) ?? undefined;
             },
             ...metadata
         };
@@ -161,7 +161,7 @@ export const makeModelDefinition = (allDecs: ClassDecoratorMap): ModelDefinition
         } else if (validatorStaticMethod && entity.constructor[validatorStaticMethod]) {
             return entity.constructor[validatorStaticMethod](entity, modelDef);
         }
-        return standardEntityValidation(entity);
+        return standardEntityValidation(entity, modelDef);
     }
 
     const hydrateEntity = (fromData: Record<string, any>) => {
@@ -220,15 +220,12 @@ export const getModelDefinition = (clazz: any) => {
     const guid = getGuid(clazz);
     const cacheKey = guid;
 
-    // console.log('1. getModelDefinition cacheKey=', cacheKey, '->', modelDefCache[cacheKey], clazz);
     if (modelDefCache[cacheKey]) return modelDefCache[cacheKey];
 
-    // console.log('2. getModelDefinition get decMap', 'guid=',getGuid(clazz)?.toString());
     const allDecs = getInheritedClassDecoratorMap(clazz, [EntityDecorators.Model, EntityDecorators.Property, EntityDecorators.Validator]);
     if (!allDecs) return;
 
     modelDefCache[cacheKey] = makeModelDefinition(allDecs);
-    // console.log('3. getModelDefinition SET: cacheKey=', cacheKey, '->', modelDefCache[cacheKey]);
     return modelDefCache[cacheKey];
 }
 
