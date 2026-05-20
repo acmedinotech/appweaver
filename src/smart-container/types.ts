@@ -1,8 +1,7 @@
-export const SC_ENV_PREFIX = '';
-
-export enum SCEnvVars {
-    RUN_MODES = 'RUN_MODES',
-    ENABLED_BUNDLE_IDS = 'ENABLED_BUNDLE_IDS',
+export enum EventBusTopics {
+    CONTAINER_CONFIGURED = 'containerConfigured',
+    SERVICE_BOOTED = 'serviceBooted',
+    SERVICE_ERROR = 'serviceError',
 }
 
 export type ServiceFilterComplex = {
@@ -23,17 +22,20 @@ export type ServiceFilterComplex = {
  */
 export type ServiceFilter = string | ServiceFilterComplex
 
-export const KEY_SVC_META = Symbol('svc.metadata');
+export const KEY_SVC_META = 'svc.metadata';
 
 export type ServiceMetadata = {
     id: string;
     bundleId?: string;
-    interfaces?: string[];
     priority?: number;
+    interfaces?: string[];
     lifecycle?: 'singleton' | 'container' | 'transient';
-    enabled?: boolean;
+    disabled?: boolean;
     runModes?: string[];
+    properties?: Record<string, any>;
 }
+
+export type MetadataTransformer = (serviceMetadata: ServiceMetadata, decoratorMetadata: any) => ServiceMetadata;
 
 export type ServiceRecord = {
     service: any;

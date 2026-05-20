@@ -4,24 +4,6 @@ import { KEY_SVC_META, type ServiceFilter, type ServiceMetadata } from "./types"
 export const SVC_PRIORITY_DEFAULT = 0;
 export const SVC_LIFECYCLE_DEFAULT = 'container';
 
-export const normalizeServiceMetadata = (metadata: Partial<ServiceMetadata> = {}): ServiceMetadata => {
-    return {
-        id: metadata.id ?? new Date().toISOString(),
-        interfaces: metadata.interfaces ?? [],
-        priority: metadata.priority ?? SVC_PRIORITY_DEFAULT,
-        lifecycle: metadata.lifecycle ?? SVC_LIFECYCLE_DEFAULT,
-        enabled: metadata.enabled ?? true,
-        runModes: metadata.runModes ?? [],
-    }
-}
-
-/**
- * CLASS DECORATOR: Defines the entrypoint for an application.
- * @param metadata 
- */
-export const Application = (metadata: any) => {
-}
-
 /**
  * CLASS DECORATOR: Defines a service in the container.
  * @param metadata 
@@ -35,16 +17,28 @@ export const Service = (metadata: ServiceMetadata) => {
     }
 }
 
+/**
+ * Creates a @Service decorator set with `bundleId`. This is provided as a convenience
+ * for when you have several services spread across multiple files. Example:
+ * 
+ * ```ts
+ * // in a shared file
+ * export const bundleId = `acmedinotech.dummyBundle`;
+ * export const BundledService = makeBundleService(bundleId);
+ * 
+ * // in a service file
+ * @BundledService({ ... })
+ * export class AnyService {}
+ * ```
+ * @param bundleId 
+ * @returns 
+ */
+export const makeBundledService = (bundleId: string) => 
+    (metadata: ServiceMetadata) => Service({ ...metadata, bundleId })
+
 export const getServiceMetadata = (target: any) => {
     return target[KEY_SVC_META];
 }
-
-/**
- * CLASS DECORATOR: Defines a bundle activator for the application.
- * @param metadata 
- * @returns 
- */
-export const BundleActivator = (metadata: any) => {}
 
 /**
  * PROPERTY & METHOD DECORATOR: Injects a service into a property or
@@ -52,8 +46,7 @@ export const BundleActivator = (metadata: any) => {}
  * @param metadata 
  */
 export const Inject = (filter: ServiceFilter) => {
-    return (target: any, memberKey: string | symbol, descriptor?: PropertyDescriptor) => {
-        console.log('🟢 Inject', target, memberKey, descriptor);
+    return (target: any, memberKey: string | string, descriptor?: PropertyDescriptor) => {
         if (descriptor) {
             registerMethodDecorator('Inject', target, memberKey as string, filter);
         } else {
@@ -69,9 +62,14 @@ export const Inject = (filter: ServiceFilter) => {
  * @returns 
  */
 export const Activate = (metadata: any = undefined) => {
-    return (target: any, propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
-        console.log('🟢 Activate', target, propertyKey, descriptor);
+    return (target: any, propertyKey: string | string, descriptor: PropertyDescriptor) => {
         registerMethodDecorator('Activate', target, propertyKey as string, metadata);
+    }
+}
+
+export const PostBoot = (metadata: any = undefined) => {
+    return (target: any, propertyKey: string | string, descriptor: PropertyDescriptor) => {
+        registerMethodDecorator('PostBoot', target, propertyKey as string, metadata);
     }
 }
 
@@ -81,7 +79,17 @@ export const Activate = (metadata: any = undefined) => {
  * @returns 
  */
 export const Deactivate = (metadata: any = undefined) => {
-    return (target: any, propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
+    return (target: any, propertyKey: string | string, descriptor: PropertyDescriptor) => {
         registerMethodDecorator('Deactivate', target, propertyKey as string, metadata);
+    }
+}
+
+export type ConfigProviderMetadata = {
+    namespace: string;
+};
+
+export const ConfigProvider = (metadata: ConfigProviderMetadata) => {
+    return (target: any) => {
+        registerClassDecorator('ConfigProvider', target, metadata);
     }
 }

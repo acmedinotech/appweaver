@@ -1,18 +1,30 @@
-import { getClassesForDecorator, getDecoratedClassObject, type ClassDecoratorRecord } from "../decorator-registry";
-import { getServiceMetadata, normalizeServiceMetadata, SVC_PRIORITY_DEFAULT } from "./decorators";
-import type { ServiceFilter, ServiceFilterComplex, ServiceMetadata, ServiceRecord } from "./types.ts";
-
-export const asyncForEach = async (arr: any[], callback: (...args:any[]) => Promise<void>) => {
-    for (const item of arr) {
-        await callback(item);
-    }
-}
+import { getClassesForDecorator, getClassDecoratorMap, type ClassDecoratorRecord, type ClassDecoratorMap } from "../decorator-registry";
+import { ConfigProvider, SVC_LIFECYCLE_DEFAULT, SVC_PRIORITY_DEFAULT } from "./decorators";
+import { type MetadataTransformer, type ServiceFilter, type ServiceFilterComplex, type ServiceMetadata, type ServiceRecord } from "./types";
+import { AWEnvVars } from "../constants";
 
 export type BootServiceDeferred = {
     metadata: ServiceMetadata;
     lastInjectorCount: number;
     injector: () => number;
     activator: () => Promise<void>;
+}
+
+/**
+ * Normalizes metadata, defaulting the service to `disabled`.
+ */
+export const normalizeServiceMetadata = (metadata: Partial<ServiceMetadata> = {}): ServiceMetadata => {
+    return {
+        // @todo better default id
+        id: metadata.id ?? new Date().toISOString(),
+        interfaces: [],
+        priority: SVC_PRIORITY_DEFAULT,
+        lifecycle: SVC_LIFECYCLE_DEFAULT,
+        disabled: true,
+        bundleId: '*',
+        runModes: ['default'],
+        ...metadata,
+    }
 }
 
 const _singletons: Record<string, ServiceRecord> = {};
@@ -33,17 +45,16 @@ export const filterServiceComplex = ([id, svc]: [string, ServiceRecord], filter:
  * @param filter 
  * @returns 
  */
-export const filterServices = (services: Record<string, ServiceRecord>, filter: ServiceFilter) => {
+export const filterServices = (services: Record<string, ServiceRecord>, filter: ServiceFilter): any[]|any|undefined => {
     if (typeof filter === 'string') {
         const svc = services[filter] ?? _singletons[filter];
-        if (svc) { return [svc.service]; }
-        return []
+        return svc?.service;
     }
 
     const {cardinality} = filter;
     const found: any[] = Object.entries(services)
         .filter((ele) => filterServiceComplex(ele, filter))
-        .sort((a, b) => (a[1].metadata.priority??SVC_PRIORITY_DEFAULT) - (b[1].metadata.priority??SVC_PRIORITY_DEFAULT))
+        .sort((a, b) => (b[1].metadata.priority??SVC_PRIORITY_DEFAULT) - (a[1].metadata.priority??SVC_PRIORITY_DEFAULT))
         .map((ele) => ele[1].service);
     
     switch (cardinality) {
@@ -60,17 +71,109 @@ export const filterServices = (services: Record<string, ServiceRecord>, filter: 
 }
 
 export type BootContainerOptions = {
+    nodeEnv: string;
     /** If defined, restricts services to the given bundle ids. */
-    enabledBundleIds?: string[];
-    runModes?: string[];
+    bundleIds: Record<string, boolean>;
+    runModes: Record<string, boolean>;
 }
 
 export type InjectDependency = [number, string, ServiceFilter];
 
+export const parseRuleStringToMap = (ruleString?: string, initialMap: Record<string, boolean> = {}): Record<string, boolean> => {
+    const rstring = (ruleString ?? '').trim();
+    if (!rstring) {
+        return initialMap;
+    }
+
+    const map: Record<string, boolean> = {...initialMap};
+    const rules = rstring.split(/\s*,\s*/g);
+    for (const rule of rules) {
+        if (rule.startsWith('!')) {
+            map[rule.slice(1)] = false;
+        } else {
+            map[rule] = true;
+        }
+    }
+    return map;
+}
+
+export const getConfigFromEnv = (env: Record<string, string>): BootContainerOptions => {
+    const config: BootContainerOptions = {
+        runModes: parseRuleStringToMap(env[AWEnvVars.RUN_MODES], {[env['NODE_ENV'] ?? 'development']: true, default: true}),
+        bundleIds: parseRuleStringToMap(env[AWEnvVars.BUNDLE_IDS] ?? ''),
+        nodeEnv: env['NODE_ENV'] ?? 'development',
+    }
+    return config;
+}
+
+const _metadataTransformers: Record<string, MetadataTransformer> = {};
+
+/**
+ * Allows transformation of @Service metadata via other class decorators. For instance,
+ * @Controller services will add `http.Controller` to the `interfaces` array.
+ * @param decorator 
+ * @param transformer 
+ */
+export const addMetadataTransformer = (decorator: string, transformer: MetadataTransformer) => {
+    _metadataTransformers[decorator] = transformer;
+}
+
+export const applyMetadataTransformers = (_metadata: ServiceMetadata, decoratedClassObject: ClassDecoratorMap) => {
+    let metadata = {..._metadata};
+    for (const decorator of Object.keys(decoratedClassObject.class)) {
+        if (_metadataTransformers[decorator]) {
+            metadata = _metadataTransformers[decorator](metadata, decoratedClassObject.class[decorator]);
+        }
+    }
+    return metadata;
+}
+
 export class SmartContainer {
     protected _services: Record<string, ServiceRecord> = {};
-    
+    protected _config: BootContainerOptions;
+
+    constructor({
+        bundleIds = {},
+        runModes = {},
+    }: Partial<BootContainerOptions> = {}) {
+        this._config = getConfigFromEnv(process.env as Record<string, string>);
+        // bundleIds and runModes are guarded by any initial ENV_VAR values
+        this._config.bundleIds = { ...bundleIds, ...this._config.bundleIds };
+        this._config.runModes = { ...runModes, ...this._config.runModes };
+    }
+
+    public isRunModeEnabled(runMode: string|string[]) {
+        const checkModes = Array.isArray(runMode) ? runMode : [runMode];
+        for (const mode of checkModes) {
+            if (this._config.runModes[mode]) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public isBundleIdEnabled(bundleId?: string) {
+        return this._config.bundleIds[bundleId??'*'] ?? this._config.bundleIds['*'] ?? false;
+    }
+
+    public isEnvDev() {
+        return this._config.nodeEnv.startsWith('dev');
+    }
+
+    public isEnvTest() {
+        return this._config.nodeEnv === 'test';
+    }
+
+    public isEnvProd() {
+        return this._config.nodeEnv.startsWith('prod');
+    }
+
     register(id: string, service: any, _metadata: Partial<ServiceMetadata> = {}) {
+        if (this.getService(id)) {
+            console.warn(`🟡 Service ${id} is already registered`);
+            return false;
+        }
+
         // @todo check if service is already registered
         const metadata = normalizeServiceMetadata({id, ..._metadata});
         const ptr = metadata.lifecycle === 'singleton' ? _singletons : this._services;
@@ -78,27 +181,29 @@ export class SmartContainer {
             service,
             metadata
         }
+        return true;
     }
 
+    /**
+     * Attempts to get a service by id. Checks for singleton first, then container.
+     */
     getService<T>(id: string) {
-        return (_singletons[id] ?? this._services[id]) as T;
+        return (_singletons[id]?.service ?? this._services[id]?.service) as T;
     }
 
     findServices(filter: ServiceFilter) {
         return filterServices(this._services, filter);
     }
 
-    protected liveServices: Record<string, {status: string; error: any}> = {}
-
-    protected depCheckCycle = 0;
+    /** Tracks all services in the container. */
+    protected serviceTracker: Record<string, {status: string; error: any}> = {}
+    /** Tracks unresolved dependencies for each service in map. */
     protected dependencyGraph: Record<string, InjectDependency[]> = {};
 
     protected resolveDependencies(service: any, dependencies: InjectDependency[]): InjectDependency[] {
         const unresolvedDependencies: typeof dependencies = [];
         for (const [memberType, memberKey, filter] of dependencies) {
-            // console.log('💜 resolveDependencies', memberType, memberKey, filter);
             const queryResults = this.findServices(filter);
-            // console.log('>>> queryResults', queryResults);
             if (!queryResults) {
                 unresolvedDependencies.push([memberType, memberKey, filter]);
             } else {
@@ -112,62 +217,54 @@ export class SmartContainer {
         return unresolvedDependencies;
     }
 
-    bootService([guid, cls, metadata]: ClassDecoratorRecord) {
-        // @todo apply enabledBundleIds
-        // @todo apply runModes
+    protected postBootServices: {service: any, method: string, priority: number}[] = [];
+
+    bootService([guid, _metadata, clsGetter]: ClassDecoratorRecord) {
         // @todo apply enabled
-        // @todo map interfaces to services
-        
-        // console.log('🟢 Annotated service', guid, cls,metadata);
 
         let status = 'defined';
         let error: any = null;
 
         // @todo work out semantics for singleton/container (might need a singletonLiveServices module var)
-        if (this.getService(metadata.id)) {
-            console.warn(`🟡 Service ${metadata.id} is already registered`);
+        if (this.getService(_metadata.id)) {
+            // console.warn(`🟡 Service ${metadata.id} is already registered`);
             status = 'error';
-            error = new Error(`Service ${metadata.id} is already registered`);
-            this.liveServices[metadata.id] = {status, error};
-            return {metadata, lastInjectorCount: 0, injector: () => 0, activator: async() => {}};
+            error = `Service ${_metadata.id} is already registered`;
+            this.serviceTracker[_metadata.id] = {status, error};
+            return {metadata: _metadata, lastInjectorCount: 0, injector: () => 0, activator: async() => {}};
         }
 
+        const cls = clsGetter();
         const service = new cls();
-
-        // @todo detect dependencies
-        const decoratedClassObject = getDecoratedClassObject(guid);
+        const decoratedClassObject = getClassDecoratorMap(guid);
+        const metadata = applyMetadataTransformers(_metadata as ServiceMetadata, decoratedClassObject);
 
         status = 'pending';
-        this.liveServices[metadata.id] = {status, error};
+        this.serviceTracker[metadata.id] = {status, error};
 
         const dependencies = [
-            ...(decoratedClassObject.decoratorToProps.Inject ?? []).map(([memberKey, filter]) => [0, memberKey, filter] as InjectDependency),
-            ...(decoratedClassObject.decoratorToMethods.Inject ?? []).map(([memberKey, filter]) => [1, memberKey, filter] as InjectDependency),
+            ...Object.entries(decoratedClassObject.properties.Inject ?? {}).map(([memberKey, filter]) => [0, memberKey, filter] as InjectDependency),
+            ...Object.entries(decoratedClassObject.methods.Inject ?? {}).map(([memberKey, filter]) => [1, memberKey, filter] as InjectDependency),
         ]
         this.dependencyGraph[metadata.id] = dependencies;
 
         const me = this;
         const injector = () => {
-            // console.log('>>> injector', metadata.id);
-            const unresolvedDependencies = this.resolveDependencies(service, me.dependencyGraph[metadata.id]);
-            // console.log('>>> unresolvedDependencies', metadata.id,unresolvedDependencies);
+            const unresolvedDependencies = me.resolveDependencies(service, me.dependencyGraph[metadata.id]);
             if (unresolvedDependencies.length === 0) {
                 delete me.dependencyGraph[metadata.id];
-                // console.log(`🟢 resolved ${metadata.id}`);
                 return 0;
             } else {
                 me.dependencyGraph[metadata.id] = unresolvedDependencies;
-                // console.warn(`🟡 pending ${metadata.id}: ${unresolvedDependencies} dependencies`);
                 return unresolvedDependencies.length;
             }
         }
 
         const activator = async () => {
-            const activatorMethod = decoratedClassObject.decoratorToMethods.Activate?.[0]?.[0];
-            // console.log('🟢 activatorMethod', activatorMethod);
+            const activatorMethod = Object.keys((decoratedClassObject.methods.Activate??{}))[0];
             if (activatorMethod) {
                 try {
-                    await service[activatorMethod]();
+                    await service[activatorMethod](metadata);
                     status = 'active';
                 } catch (err) {
                     console.error('🔴 Error activating service', metadata.id, err);
@@ -178,46 +275,63 @@ export class SmartContainer {
                 status = 'active';
             }
 
-            me.register(metadata.id, service);
-            me.liveServices[metadata.id] = {status, error};
+            me.register(metadata.id, service, metadata);
+            console.log('ℹ️ bootService: ', status == 'active' ? '✅' : '⚠', metadata.id);
+            me.serviceTracker[metadata.id] = {status, error};
+            const postBootMethod = Object.keys((decoratedClassObject.methods.PostBoot??{}))[0];
+            if (postBootMethod) {
+                me.postBootServices.push({service, method: postBootMethod, priority: metadata.priority ?? SVC_PRIORITY_DEFAULT});
+            }
+            // @todo emit event 'serviceBooted'
         }
 
         return {metadata, lastInjectorCount: -1, injector, activator};
     }
 
-    async bootContainer({
-        enabledBundleIds = [],
-        runModes = [],
-    }: BootContainerOptions = {}) {
-        // @todo load env vars (runModes, enabledBundleIds)
-        // @todo remove params.enabledBundleIds and params.runModes if prefixed with '!'
-        console.group('🟢 Booting container');
+    async bootContainer() {
+        console.group('🟢 SmartContainer: start boot');
 
         const pendingServices: BootServiceDeferred[] = [];
         const annotatedServices = getClassesForDecorator('Service');
-        annotatedServices.forEach(async (decRec) => {
-            const {injector, activator} = this.bootService(decRec);
+
+        for (const [guid, metadata, clsGetter] of annotatedServices) {
+            const normMetadata = normalizeServiceMetadata(metadata);
+            if (!this.isBundleIdEnabled(normMetadata.bundleId)) {
+                console.log(`🔴`, {message: 'bundleId not enabled', metadata});
+                continue;
+            }
+            if (!this.isRunModeEnabled(normMetadata.runModes ?? 'default')) {
+                console.log(`🔴`, {message: 'runMode not enabled', metadata});
+                continue;
+            }
+
+            const {injector, activator} = this.bootService([guid, normMetadata, clsGetter]);
             const lastInjectorCount = injector();
             if (lastInjectorCount == 0) {
                 await activator();
             } else {
-                pendingServices.push({metadata: decRec[2], lastInjectorCount, injector, activator});
+                pendingServices.push({metadata: normMetadata, lastInjectorCount, injector, activator});
             }
-        });
+        }
 
         await this.resolvePendingServices(pendingServices);
-
+        console.log('🟢 SmartContainer: end boot');
+        await this.execPostBoot();
         console.groupEnd();
     }
 
+    protected async execPostBoot() {
+        console.log('🟢 SmartContainer: executing @PostBoot methods');
+        for (const {service, method} of this.postBootServices.sort((a, b) => b.priority - a.priority)) {
+            await service[method](this);
+        }
+    }
+
     async resolvePendingServices(pending: BootServiceDeferred[]) {
-        // console.log('🔵 resolvePendingServices', pending);
         const newPending: typeof pending = [];
         for (const deferred of pending) {
             const id = deferred.metadata.id;
-            // console.log('>>> deferred', id, deferred);
             const lastInjectorCount = deferred.injector();
-            // console.log('🔵 resolvePendingServices', {lastInjectorCount});
             if (lastInjectorCount == 0) {
                 await deferred.activator();
             } else if (deferred.lastInjectorCount != lastInjectorCount) {
@@ -227,9 +341,22 @@ export class SmartContainer {
             }
         }
 
-        // console.log('>>> hasPending', newPending.length);
         if (newPending.length > 0) {
             this.resolvePendingServices(newPending);
         }
     }
+
+    protected eventBus = {
+        // container: new EventEmitter(),
+        // services: new EventEmitter(),
+    }
+
+    listenOn(bus: keyof typeof this.eventBus, topic: string, listener: (...args: any[]) => void) {
+        // this.eventBus[bus].on(topic, listener);
+        // return () => this.eventBus[bus].off(topic, listener);
+    }
+}
+
+@ConfigProvider({ namespace: 'appweaver' })
+export class BaseConfigProvider {
 }

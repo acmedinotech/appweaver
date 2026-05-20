@@ -1,8 +1,10 @@
 import { Activate, Deactivate, Inject, Service } from "../smart-container/decorators";
 
+export const bundleId = 'test-data.bundle-a';
+
 @Service({
     id: 'DummyServiceA',
-    bundleId: 'test-data.bundle-a',
+    bundleId,
 })
 export class DummyServiceA {
     activated = 0;
@@ -13,25 +15,29 @@ export class DummyServiceA {
     @Activate()
     activate() {
         this.activated = 1;
-        console.log('DummServiceA.activate');
+        console.log('DummyServiceA.activate');
     }
 
     @Deactivate()
     deactivate() {
         this.activated = -1
-        console.log('DummServiceA.deactivate');
+        console.log('DummyServiceA.deactivate');
     }
 
-    // @Inject('DummyServiceB')
-    // setDummyServiceB(dummyServiceB: DummyServiceB) {
-    // }
+
 }
 
 @Service({
     id: 'DummyServiceB',
-    bundleId: 'test-data.bundle-a',
+    bundleId,
 })
 export class DummyServiceB {
+    initialized = 0
+    @Activate()
+    initialize() {
+        this.initialized = 1;
+        console.log('DummyServiceB.activate');
+    }
 }
 
 export const autowire = [DummyServiceA, DummyServiceB];

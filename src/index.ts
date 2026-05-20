@@ -1,5 +1,5 @@
 import { SmartContainer } from "./smart-container";
-import * as bundleA from './test-data/bundle';
+import * as bundleA from './test-data/bundle-a';
 
 const app = new SmartContainer();
 bundleA.autowire;
