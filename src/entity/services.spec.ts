@@ -74,7 +74,7 @@ describe('entity/services', () => {
             validateEntity(modelDef: ModelDefinition) {
                 if (this.name === 'force-error')
                     return new PropertyValidationError('model.instanceValidator', 'force-error detected');
-                return standardEntityValidation(modelDef, this);
+                return standardEntityValidation(this, modelDef);
             }
         }
 
@@ -87,7 +87,7 @@ describe('entity/services', () => {
             static validateEntity(modelDef: ModelDefinition, entity: any) {
                 if (entity.name === 'force-error-static')
                     return new PropertyValidationError('model.staticValidator', 'force-error detected');
-                return standardEntityValidation(modelDef, entity);
+                return standardEntityValidation(entity, modelDef);
             }
         }
 

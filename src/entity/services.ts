@@ -1,6 +1,6 @@
-import { profile } from "node:console";
-import { getClassDecoratorMap, getClassForGuid, getGuid, getInheritedClassDecoratorMap, type ClassDecoratorMap } from "../decorator-registry";
-import { EntityDecorators, EntityValidationError, PropertyValidationError, type EntityValidatorFn, type ModelDefinition, type PropertyMetadata } from "./decorators";
+import { randomUUID } from "node:crypto";
+import { getClassForGuid, getGuid, getInheritedClassDecoratorMap, type ClassDecoratorMap } from "../decorator-registry";
+import { EntityDecorators, EntityValidationError, getModelGuidByEmid, PropertyValidationError, type DehydrateOptions, type EntityValidatorFn, type IdExtractorFn, type ModelDefinition, type PropertyMetadata } from "./decorators";
 
 export const passthruDecode = (value: any) => value;
 export const passthruEncode = (value: any) => value;
@@ -125,6 +125,135 @@ export const standardEntityValidation: EntityValidatorFn = (entity, modelDef) =>
     return new EntityValidationError('entity-validation-failed: see properties', emid, errors)
 }
 
+const __uuid_keys: Record<string, boolean> = { _id: true, id: true };
+
+/**
+ * Produces a map of key-value pairs that define an entity.
+ */
+export const PROP_REL_ENCODING = '_rel_encType';
+export const PROP_REL_EMID = '_rel_emid';
+
+export const UUID_DEFAULT_PREFIX = '*';
+export const VALUE_UNDEFINED_PREFIX = '*undefined:';
+
+const defaultIdExtractor: IdExtractorFn = (entity, keys) => {
+    const extractedKeys: Record<string, any> = {};
+    for (const key of keys) {
+        if (entity[key] !== undefined)
+            extractedKeys[key] = entity[key];
+        else if (__uuid_keys[key])
+            extractedKeys[key] = `${UUID_DEFAULT_PREFIX}${randomUUID()}`
+        else
+            extractedKeys[key] = `${VALUE_UNDEFINED_PREFIX}${key}`;
+    }
+    return extractedKeys;
+}
+
+export const dehydrateProperty = (value: any, propDef: PropertyMetadata, entity: any, { idExtractor = defaultIdExtractor }: DehydrateOptions = {}) => {
+    let normValue = value;
+    if (propDef.relationship) {
+        const { emid: emidDefault, relType, emidConstraints: modelConstraints } = propDef.relationship;
+        if (relType === 'embedded')
+            return normValue;
+
+        const {preservedProps: keys} = propDef.relationship;
+        // @todo handle isArray
+        const relEntity = value;
+        if (typeof relEntity !== 'object')
+            return null;
+
+        // project keys + encType & emid/default
+        const extractedKeys = idExtractor(relEntity, keys, propDef);
+        const emid = relEntity[PROP_REL_EMID] ?? emidDefault;
+        // @todo apply emidConstraints
+
+        normValue = {
+            ...extractedKeys,
+            [PROP_REL_ENCODING]: relType,
+            [PROP_REL_EMID]: emid,
+            // @todo _rel_parent_id
+        };
+    }
+
+    return normValue;
+}
+
+export class Dehydrator { }
+
+/**
+ * Produces 1+ documents containing:
+ * 
+ * - the root entity being dehydrated
+ * - any property defined as `relationship=child` (recurse)
+ */
+export const dehydrateEntityWithRelations = ({entity, modelDef, options}: {entity: any, modelDef: ModelDefinition, options?: DehydrateOptions}) => {
+    const docs: Record<string, any>[] = [];
+
+    const { depth: maxDepth = -1 } = (options ?? {});
+
+    const recurseDehydrate = (ent: any, modelDef?: ModelDefinition, { depth = 0 }: DehydrateOptions = {}) => {
+        if (!modelDef || (maxDepth >= 0 && depth >= maxDepth))
+            return;
+
+        const { id, _id, [PROP_REL_EMID]: emid, ...rest } = ent;
+        const doc: Record<string, any> = { id, _id, [PROP_REL_EMID]: emid };
+        docs.push(doc);
+
+        for (const [propName, propDef] of Object.entries(modelDef.properties)) {
+            const value = dehydrateProperty(ent[propName], propDef, ent, options);
+            doc[propName] = value;
+            if (propDef.relationship?.relType === 'child') {
+                recurseDehydrate(
+                    value,
+                    getModelDefinitionByEmid(value[PROP_REL_EMID]),
+                    { depth: depth + 1 }
+                );
+            }
+        }
+    }
+
+    recurseDehydrate(entity, modelDef);
+    return docs;
+}
+
+export const hydrateEntityWithRelations = ({ entity: _entity, modelDef, data }: {
+    entity?: any;
+    modelDef?: ModelDefinition;
+    data: Record<string, any>;
+}) => {
+    if (!modelDef) return undefined;
+    const entity = _entity ?? (modelDef.createInstance());
+
+    Object.entries(modelDef.properties).forEach(([propName, propDef]) => {
+        const value = data[propName];
+        if (propDef.relationship) {
+            const { relType, emid: emidDefault } = propDef.relationship;
+            if (value instanceof Array) {
+                entity[propName] = value.map(subent => hydrateEntityWithRelations({
+                    modelDef: getModelDefinitionByEmid(subent[PROP_REL_EMID] ?? emidDefault),
+                    data: subent,
+                }) ?? subent);
+            } else {
+                entity[propName] = hydrateEntityWithRelations({
+                    modelDef: getModelDefinitionByEmid(value[PROP_REL_EMID]),
+                    data: value,
+                }) ?? value;
+            }
+            
+            if (relType !== 'embedded') {
+                // @todo fetch deep entities
+                console.warn(`🟠 hydrateEntityWithRelations: data fetching not-supported: ${relType}`, { relType }, value);
+            } else {
+                
+            }
+        } else {
+            entity[propName] = propDef.decode(value, propName, modelDef);
+        }
+    })
+
+    return entity;
+}
+
 const modelDefCache: Record<string, ModelDefinition> = {};
 
 /**
@@ -147,7 +276,7 @@ export const makeModelDefinition = (allDecs: ClassDecoratorMap): ModelDefinition
             decode,
             encode,
             validate: (value: any, propDefName) => {
-                return standardPropertyValidation(value, propDefName ?? property, modelDef) 
+                return standardPropertyValidation(value, propDefName ?? property, modelDef)
                     ?? validateFn(value, property, modelDef) ?? undefined;
             },
             ...metadata
@@ -164,20 +293,16 @@ export const makeModelDefinition = (allDecs: ClassDecoratorMap): ModelDefinition
         return standardEntityValidation(entity, modelDef);
     }
 
-    const hydrateEntity = (fromData: Record<string, any>) => {
-        const entity = new (getClassForGuid(guid))();
-        for (const property in properties) {
-            entity[property] = properties[property].decode(fromData[property], property, modelDef);
-        }
-        return entity;
+    const hydrateEntity = (data: Record<string, any>, entity?: any) => {
+        return hydrateEntityWithRelations({
+            modelDef,
+            data,
+            entity,
+        });
     }
 
-    const dehydrateEntity = (entity: any) => {
-        const data: Record<string, any> = {};
-        for (const property in properties) {
-            data[property] = properties[property].encode(entity[property], property, modelDef);
-        }
-        return data;
+    const dehydrateEntity = (entity: any, options?: DehydrateOptions) => {
+        return dehydrateEntityWithRelations({entity, modelDef, options});
     }
 
     const removeReadOnly = (data: Record<string, any>) => {
@@ -206,6 +331,7 @@ export const makeModelDefinition = (allDecs: ClassDecoratorMap): ModelDefinition
         dehydrateEntity,
         removeReadOnly,
         prepareData,
+        createInstance: () => new (getClassForGuid(guid))(),
     }
 
     return modelDef;
@@ -234,3 +360,6 @@ export const getModelDefinitionByGuid = (guid: string) => {
     if (!clazz) return undefined;
     return getModelDefinition(clazz);
 }
+
+export const getModelDefinitionByEmid = (emid: string) =>
+    getModelDefinitionByGuid(getModelGuidByEmid(emid));

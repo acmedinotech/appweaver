@@ -19,8 +19,8 @@ const collectionToGuids: Record<string, string[]> = {};
 const modelToGuid: Record<string, string> = {};
 
 export const getModelDefinitionGuid = (name: string, collection = DEFAULT_COLLECTION) => modelToGuid[`${collection}@${name}`];
+export const getModelGuidByEmid = (emid: string) => modelToGuid[emid];
 export const getModelDefinitionsByCollection = (collection = DEFAULT_COLLECTION) => collectionToGuids[collection] ?? [];
-
 /**
  * CLASS DECORATOR: Defines an entity @Model.
  * @param metadata 
@@ -81,14 +81,33 @@ export type PropertyMetadata = {
     isAutoCreated?: boolean;
     /** If true and autoUpdatedValue set, the property is auto-updated by the system at update (conflicts with isRequired/isReadOnly). */
     isAutoUpdated?: boolean;
-    /** If true, the property is an array. */
-    isArray?: boolean;
+    /** If true, the property is an array. If object, define array constraints. */
+    isArray?: true | {
+        /** If set, enforce a minimum number of selected options. */
+        minSelected?: number;
+        /** If set, enforce a maximum number of selected options. */
+        maxSelected?: number;
+    };
     /** If defined, restricts values to the specified types (`*` allows any type). */
     isTypeOf?: (typeof _typeof | '*')[];
+    /**
+     * If set, property value must exist as a key in the map. Map is `value -> label`.
+     * (This could be used with checkboxes, dropdowns, etc.)
+     */
+    fixedValues?: Record<string, string>;
     /** WIP */
-    relationship?: {
-        type: 'child' | 'parent' | 'ref'
-        isEmbedded?: boolean;
+    relationship?: ({
+        relType: 'embedded'
+        } | {
+        relType:'child' | 'parent' | 'ref'
+        /** A set of property names to save for foreign/reference relationships. */
+        preservedProps: string[];
+    }) & {
+        emid?: string;
+        /**
+         * List of: `model`, `collection@model`, `model*`, `collection@*`. Invert logic with `!` prefix.
+         * */
+        emidConstraints?: string[]
     }
     autoCreatedValue?: (propertyKey: string, modelDef: ModelDefinition) => any;
     autoUpdatedValue?: (propertyKey: string, modelDef: ModelDefinition) => any;
@@ -120,7 +139,7 @@ export const Validator  = () => {
  * @param metadata 
  * @returns 
  */
-export const Property = (metadata: Partial<PropertyMetadata>) => {
+export const Property = (metadata: Partial<PropertyMetadata> = {}) => {
     return (target: any, propertyKey: string) => {
         registerPropertyDecorator(EntityDecorators.Property, target, propertyKey, {name: propertyKey, ...metadata});
     };
@@ -133,15 +152,23 @@ export const Property = (metadata: Partial<PropertyMetadata>) => {
  */
 export type EntityValidatorFn = (entity?: any, modelDef?: ModelDefinition) => undefined | AppWeaverError;
 
+export type IdExtractorFn = (entity: any, keys: string[], propMeta: PropertyMetadata, modelDef?: ModelDefinition) => Record<string, any>;
+
+export type DehydrateOptions = {
+    idExtractor?: IdExtractorFn;
+    depth?: number;
+}
+
 /**
  * Provides hydration/validation/dehydration lifecycle management
  */
 export interface ModelDefinition extends ModelMetadata {
     properties: Record<string, PropertyMetadata>;
     getModelId: () => string;
+    createInstance: () => any;
     validateEntity: EntityValidatorFn;
     hydrateEntity: (fromData: Record<string, any>) => any;
-    dehydrateEntity: (entity: any) => Record<string, any>;
+    dehydrateEntity: (entity: any, options?: DehydrateOptions) => Record<string, any>[];
     removeReadOnly: (data: Record<string, any>) => Record<string, any>;
     /**
      * Performs secure data enhancement & cleanup as follows::
@@ -158,6 +185,7 @@ export interface ModelDefinition extends ModelMetadata {
     }
 }
 
+// @todo move to services
 export const hydrateAndValidateEntity = (modelDef: ModelDefinition, fromData: Record<string, any>) => {
     const entity = modelDef.hydrateEntity(fromData);
     const error = modelDef.validateEntity(entity);
