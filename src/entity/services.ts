@@ -79,6 +79,7 @@ export const standardPropertyValidation = (value: any, propertyName: string, mod
             // case: assert isTypeOf on first array value
             // unsupported: multi-type checking on multiple values: must be done by caller via @Validator if required
             sampleValue = value[0];
+            // @todo use Set type to store & compare all typeofs
         }
     }
 
@@ -107,7 +108,7 @@ export const standardPropertyValidation = (value: any, propertyName: string, mod
  * @returns Root `propertyName` is `{modelDef.collection}@{modelDef.name}` and `payload` elements are 
  * `{ propertyName: {propertyName} }`
  */
-export const standardEntityValidation: EntityValidatorFn = (entity, modelDef) => {
+export const standardEntityValidation: EntityValidatorFn = (modelDef, entity) => {
     if (!modelDef) return undefined;
 
     const emid = modelDef.getModelId();
@@ -243,8 +244,6 @@ export const hydrateEntityWithRelations = ({ entity: _entity, modelDef, data }: 
             if (relType !== 'embedded') {
                 // @todo fetch deep entities
                 console.warn(`🟠 hydrateEntityWithRelations: data fetching not-supported: ${relType}`, { relType }, value);
-            } else {
-                
             }
         } else {
             entity[propName] = propDef.decode(value, propName, modelDef);
@@ -286,11 +285,11 @@ export const makeModelDefinition = (allDecs: ClassDecoratorMap): ModelDefinition
 
     const validateEntity = (entity: any) => {
         if (validatorInstMethod && entity[validatorInstMethod]) {
-            return entity[validatorInstMethod](undefined, modelDef);
+            return entity[validatorInstMethod](modelDef);
         } else if (validatorStaticMethod && entity.constructor[validatorStaticMethod]) {
-            return entity.constructor[validatorStaticMethod](entity, modelDef);
+            return entity.constructor[validatorStaticMethod](modelDef, entity);
         }
-        return standardEntityValidation(entity, modelDef);
+        return standardEntityValidation(modelDef, entity);
     }
 
     const hydrateEntity = (data: Record<string, any>, entity?: any) => {
@@ -302,13 +301,16 @@ export const makeModelDefinition = (allDecs: ClassDecoratorMap): ModelDefinition
     }
 
     const dehydrateEntity = (entity: any, options?: DehydrateOptions) => {
-        return dehydrateEntityWithRelations({entity, modelDef, options});
+        const data = dehydrateEntityWithRelations({entity, modelDef, options});
+        // for now, easiest way to remove undefined values
+        return data ? JSON.parse(JSON.stringify(data)) : data;
     }
 
     const removeReadOnly = (data: Record<string, any>) => {
         const ndata = { ...data };
         for (const property in properties) {
-            if (properties[property].isReadOnly) {
+            const def = properties[property];
+            if (def.isReadOnly || def.isAutoCreated || def.isAutoUpdated) {
                 delete ndata[property];
             }
         }

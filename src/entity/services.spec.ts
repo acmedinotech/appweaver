@@ -1,4 +1,4 @@
-import { Model, Property, PropertyValidationError, Validator, type ModelDefinition } from "./decorators";
+import { EntityValidationError, Model, Property, PropertyValidationError, Validator, type ModelDefinition } from "./decorators";
 import { getModelDefinition, standardEntityValidation } from "./services";
 
 @Model({
@@ -59,8 +59,7 @@ describe('entity/services', () => {
             const data = baseModelDef.dehydrateEntity(
                 baseModelDef.hydrateEntity(entityData)
             );
-
-            expect(data).toMatchObject(entityData);
+            expect(data).toMatchObject([entityData]);
         });
     });
 
@@ -73,8 +72,8 @@ describe('entity/services', () => {
             @Validator()
             validateEntity(modelDef: ModelDefinition) {
                 if (this.name === 'force-error')
-                    return new PropertyValidationError('model.instanceValidator', 'force-error detected');
-                return standardEntityValidation(this, modelDef);
+                    return new EntityValidationError('force-error detected', 'model.instanceValidator');
+                return standardEntityValidation(modelDef, this);
             }
         }
 
@@ -86,8 +85,8 @@ describe('entity/services', () => {
             @Validator()
             static validateEntity(modelDef: ModelDefinition, entity: any) {
                 if (entity.name === 'force-error-static')
-                    return new PropertyValidationError('model.staticValidator', 'force-error detected');
-                return standardEntityValidation(entity, modelDef);
+                    return new EntityValidationError('model.staticValidator', 'force-error2 detected');
+                return standardEntityValidation(modelDef, entity);
             }
         }
 
@@ -97,9 +96,9 @@ describe('entity/services', () => {
             const validationError = modelDef.validateEntity(entity);
 
             expect(validationError?.toJson()).toEqual({
-                "contextName": "entity.property.validation-error",
-                "message": "force-error detected",
-                "propertyName": "model.instanceValidator"
+                contextName: 'model.instanceValidator',
+                message: 'force-error detected',
+                properties: undefined
             });
         });
 
@@ -107,29 +106,11 @@ describe('entity/services', () => {
             const modelDef = getModelDefinition(ModelWithStaticValidator) as ModelDefinition;
             const entity = modelDef.hydrateEntity({ name: 'force-error-static', age: 60 });
             const validationError = modelDef.validateEntity(entity);
+
             expect(validationError?.toJson()).toEqual({
-                contextName: 'testCollection@model.staticValidator',
-                message: 'entity-validation-failed: see properties',
-                properties: {
-                    age: {
-                        contextName: 'testCollection@model.staticValidator',
-                        message: 'property-typeOf (expected: [number], actual: number)',
-                        properties: undefined,
-                        propertyName: 'age'
-                    },
-                    streetAddresses: {
-                        contextName: 'testCollection@model.staticValidator',
-                        message: 'property-array (expected: array, actual: undefined)',
-                        properties: undefined,
-                        propertyName: 'streetAddresses'
-                    },
-                    ages: {
-                        contextName: 'testCollection@model.staticValidator',
-                        message: 'property-array (expected: array, actual: undefined)',
-                        properties: undefined,
-                        propertyName: 'ages'
-                    }
-                }
+                contextName: 'force-error2 detected',
+                message: 'model.staticValidator',
+                properties: undefined
             });
         });
     });

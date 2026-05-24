@@ -150,7 +150,7 @@ export const Property = (metadata: Partial<PropertyMetadata> = {}) => {
  * @param modelDef If undefined, convention dictates that method contains a default modelDef (or returns undefined)
  * @returns 
  */
-export type EntityValidatorFn = (entity?: any, modelDef?: ModelDefinition) => undefined | AppWeaverError;
+export type EntityValidatorFn = ( modelDef: ModelDefinition,entity?: any) => undefined | AppWeaverError;
 
 export type IdExtractorFn = (entity: any, keys: string[], propMeta: PropertyMetadata, modelDef?: ModelDefinition) => Record<string, any>;
 
