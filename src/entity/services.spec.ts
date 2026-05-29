@@ -1,9 +1,10 @@
+import { randomUUID } from "node:crypto";
 import { EntityValidationError, Model, Property, PropertyValidationError, Validator, type ModelDefinition } from "./decorators";
-import { getModelDefinition, standardEntityValidation } from "./services";
+import { getModelDefinition, standardEntityValidation, prepareDataForMutation } from "./services";
 
 @Model({
-    name: 'testModel',
     collection: 'testCollection',
+    name: 'testModel',
 })
 class BaseModel {
     @Property({ isRequired: true })
@@ -18,8 +19,9 @@ class BaseModel {
 
 describe('entity/services', () => {
     const baseModelDef = getModelDefinition(new BaseModel()) as ModelDefinition;
-    describe('test with BaseModel', () => {
-        it('fails standard validation', () => {
+    
+    describe('baseline behaviors', () => {
+        it('fails standard validation (asserts: isRequired, isArray, isTypeOf)', () => {
             const entity = baseModelDef.hydrateEntity({ name: undefined, age: undefined, streetAddresses: undefined, ages: ['a'] });
             const validationError = baseModelDef.validateEntity(entity);
             expect(validationError?.toJson()).toEqual({
@@ -63,7 +65,13 @@ describe('entity/services', () => {
         });
     });
 
-    describe('validation & inheritance testing', () => {
+    describe('#standardEntityValidation(), #standardPropertyValidation()', () => {
+        describe('asserts: isRequired, isReadOnly, isAutoCreated,', () => {
+
+        })
+    });
+
+    describe('entity validation & inheritance', () => {
         @Model({
             name: 'model.instanceValidator',
             collection: 'testCollection',
@@ -90,7 +98,7 @@ describe('entity/services', () => {
             }
         }
 
-        it('invokes instance validateEntity()', () => {
+        it('invokes instance validateEntity() (asserts: @Validator() instance method)', () => {
             const modelDef = getModelDefinition(ModelWithInstanceValidator) as ModelDefinition;;
             const entity = modelDef.hydrateEntity({ name: 'force-error', age: 30 });
             const validationError = modelDef.validateEntity(entity);
@@ -102,7 +110,7 @@ describe('entity/services', () => {
             });
         });
 
-        it('invokes static validateEntity()', () => {
+        it('invokes static validateEntity() (asserts: @Validator() static method)', () => {
             const modelDef = getModelDefinition(ModelWithStaticValidator) as ModelDefinition;
             const entity = modelDef.hydrateEntity({ name: 'force-error-static', age: 60 });
             const validationError = modelDef.validateEntity(entity);
@@ -111,6 +119,55 @@ describe('entity/services', () => {
                 contextName: 'force-error2 detected',
                 message: 'model.staticValidator',
                 properties: undefined
+            });
+        });
+    });
+
+    describe('hydration, dehydration, & relationships', () => {
+        const collection = 'test.hydrate-dehydrate-relationships';
+        @Model({
+            name: 'childThing',
+            collection,
+        })
+        class ChildThing {
+            static readonly emid = `${collection}@childThing`;
+            @Property({ isAutoCreated: true, autoCreatedValue: () => `${ChildThing.emid}:${randomUUID()}` })
+            _id?: string;
+            @Property({ isAutoUpdated: true, autoUpdatedValue: () => new Date()})
+            updatedAt?: Date;
+            @Property({ isRequired: true })
+            name: string = '';
+        }
+
+        @Model({
+            name: 'parent',
+            collection,
+        })
+        class Parent {
+            @Property({ relationship: { relType: 'embedded', emid: ChildThing.emid } })
+            embeddedChild?: ChildThing;
+            @Property({ relationship: { relType: 'child', preservedProps: ['_id'], emid: ChildThing.emid } })
+            strongRefChild?: ChildThing;
+            @Property({ relationship: { relType: 'ref', preservedProps: ['_id'], emid: ChildThing.emid } })
+            weakRefChild?: ChildThing;
+        }
+      
+        describe('#prepareDataForMutation()', () => {
+            it('returns expected properties on-create (asserts: isAutoCreated, autoCreatedValue)', () => {
+                const modelDef = getModelDefinition(ChildThing) as ModelDefinition;
+                const {data} = prepareDataForMutation(modelDef, 'create', { name: 'Test1' });
+                expect(data.name).toBe('Test1');
+                expect(data._id).toMatch(new RegExp(`^${ChildThing.emid}:`));
+            });
+
+            it('returns expected properties on-update (asserts: isReadOnly, isAutoCreated, isAutoUpdated, autoUpdatedValue)', () => {
+                const modelDef = getModelDefinition(ChildThing) as ModelDefinition;
+                const {data} = prepareDataForMutation(modelDef, 'update', 
+                    { _id: 'x', name: 'Test2', updatedAt: '2026-02-16' }
+                );
+                expect(data.name).toBe('Test2');
+                expect(data.updatedAt).toBeInstanceOf(Date);
+                expect(data._id).toBeUndefined();
             });
         });
     });

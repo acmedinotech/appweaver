@@ -94,7 +94,7 @@ export type PropertyMetadata = {
      * If set, property value must exist as a key in the map. Map is `value -> label`.
      * (This could be used with checkboxes, dropdowns, etc.)
      */
-    fixedValues?: Record<string, string>;
+    fixedValues?: Record<string, any>;
     /** WIP */
     relationship?: ({
         relType: 'embedded'

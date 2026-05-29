@@ -19,7 +19,7 @@ export const passthruEncode = (value: any) => value;
  * - hydrate prepared data
  * - validate prepared data
  */
-export const standardPrepareData = (modelDef: ModelDefinition, mode: 'create' | 'update', data: any, options?: { injectData?: Record<string, any>; removeKeys?: string[] }) => {
+export const prepareDataForMutation = (modelDef: ModelDefinition, mode: 'create' | 'update', data: any, options?: { injectData?: Record<string, any>; removeKeys?: string[] }) => {
     const result: ReturnType<ModelDefinition['prepareData']> = {
         data: {},
         removed: {},
@@ -30,6 +30,7 @@ export const standardPrepareData = (modelDef: ModelDefinition, mode: 'create' | 
     const isUpdate = !isCreate;
 
     for (const [propertyKey, meta] of Object.entries(modelDef.properties)) {
+        const isReadOnly = meta.isReadOnly || meta.isAutoCreated || meta.isAutoUpdated;
         if (meta.isAutoCreated) {
             // case: always remove; only auto-add back on-create
             result.removed[propertyKey] = data[propertyKey];
@@ -42,7 +43,7 @@ export const standardPrepareData = (modelDef: ModelDefinition, mode: 'create' | 
             if (isUpdate && meta.autoUpdatedValue) {
                 result.data[propertyKey] = meta.autoUpdatedValue(propertyKey, modelDef);
             }
-        } else if (isUpdate && meta.isReadOnly) {
+        } else if (isUpdate && isReadOnly) {
             // case: always remove on-update
             result.removed[propertyKey] = data[propertyKey];
         } else {
@@ -318,7 +319,7 @@ export const makeModelDefinition = (allDecs: ClassDecoratorMap): ModelDefinition
     }
 
     const prepareData: ModelDefinition['prepareData'] = (mode, data, options) => {
-        return standardPrepareData(modelDef, mode, data, options ?? {});
+        return prepareDataForMutation(modelDef, mode, data, options ?? {});
     }
 
     const modelDef: ModelDefinition = {
