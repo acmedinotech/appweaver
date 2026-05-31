@@ -1,3 +1,5 @@
+export * from './decorators';
+export * from './types';
 import { getClassesForDecorator, getClassDecoratorMap, type ClassDecoratorRecord, type ClassDecoratorMap } from "../decorator-registry";
 import { ConfigProvider, SVC_LIFECYCLE_DEFAULT, SVC_PRIORITY_DEFAULT } from "./decorators";
 import { type MetadataTransformer, type ServiceFilter, type ServiceFilterComplex, type ServiceMetadata, type ServiceRecord } from "./types";

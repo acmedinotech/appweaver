@@ -1,6 +1,10 @@
 /**
  * Public API for published bundles (no side effects on import).
  */
-export * from "./smart-container";
-export * from "./smart-container/decorators";
-export type * from "./smart-container/types";
+import * as decoratorRegistry from "./decorator-registry";
+import * as smartContainer from "./smart-container";
+import * as entity from "./entity";
+import * as http from "./http";
+import * as persist from "./persist";
+
+export { decoratorRegistry, smartContainer, entity, http, persist };

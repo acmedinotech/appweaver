@@ -1,7 +1,10 @@
 import express from 'express';
-import { Activate, PostBoot, Service, SmartContainer, type ServiceMetadata } from '../../library';
+import { smartContainer } from '../../library';
 import { HttpDecorators, Server } from '../../http/decorators';
 import { BaseHttpService, type ControllerAggregate } from '../../http/services';
+
+const { Activate, PostBoot, Service } = smartContainer;
+type ServiceMetadata = smartContainer.ServiceMetadata;
 
 export const bundleId = 'appweaver.sandbox.mern-stack.express';
 export const idExpressServer = `express.server`;
@@ -60,7 +63,7 @@ export class ExpressServer extends BaseHttpService {
         return subApp;
     }
 
-    mountServer(container: SmartContainer, controllers: ControllerAggregate[]) {
+    mountServer(container: smartContainer.SmartContainer, controllers: ControllerAggregate[]) {
         controllers.forEach((controller) => {
             const service = controller.controller;
             const { rootPath = '', isSubApp } = controller.controllerMetadata;
@@ -112,7 +115,7 @@ export class ExpressServer extends BaseHttpService {
     }
 
     @PostBoot()
-    async postBoot(container: SmartContainer) {
+    async postBoot(container: smartContainer.SmartContainer) {
         const controllers = BaseHttpService.gatherControllers(container);
         const port = this.metadata.properties?.[HttpDecorators.SERVER]?.port ?? 3000;
         this.mountServer(container, controllers);

@@ -1,6 +1,6 @@
 import { MongoClient, ObjectId, type Filter } from "mongodb";
 import { Controller, Middleware } from "../../http/decorators";
-import { Activate, Inject, Service, SmartContainer, type ServiceMetadata } from "../../library";
+import { smartContainer } from "../../library";
 import type { EntityCollectionManagerInterface, GetManyResults } from "../../persist/decorators";
 import { CollectionManagerLCRUDController as CollectionManagerAPIController } from "../../persist/services";
 import { getMongodbConfigFromEnvVars, makeMongodbClientWrapper, type MongodbWrapper } from "./mongo";
@@ -20,6 +20,8 @@ export const PROP_ENTITY_MODEL_ID = '_entityModelId';
 
 export const PROP_SYS_MANAGED_KEYS = ['_entityModelId', '_ownerId'];
 
+const {  Activate, Inject, Service } = smartContainer;
+
 @Service({
     id: idEntityManager, bundleId, properties: {
         collection: collectionName,
@@ -37,7 +39,7 @@ export class MongoEntityManager implements EntityCollectionManagerInterface {
     }
 
     @Activate()
-    async activate(metadata: ServiceMetadata) {
+    async activate(metadata: smartContainer.ServiceMetadata) {
         this.collectionName = metadata.properties?.collection ?? collectionName;
     }
 
@@ -188,7 +190,7 @@ class User {
     readonly updatedAt = undefined as unknown as Date;
 }
 
-const container = new SmartContainer({
+const container = new smartContainer.SmartContainer({
     bundleIds: {
         [bundleId]: true,
         [bundleExpressServer.bundleId]: true

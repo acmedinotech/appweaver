@@ -1,6 +1,6 @@
 import type { Request } from "express";
 import { Controller, Middleware, Route } from "../http/decorators";
-import { Inject, Service } from "../library";
+import * as smartContainer from "../smart-container";
 import { PersistInterfaces, type EntityCollectionManagerInterface, type GetManyResults } from "./decorators";
 import { getModelDefinition } from "../entity/services";
 import { HttpError } from "../http/services";
@@ -8,11 +8,11 @@ import { EntityValidationError } from "../entity/decorators";
 import { AppWeaverError } from "../constants";
 
 @Controller({ rootPath: '/_dangerous_override', isSubApp: true })
-@Service({ id: 'persist.CollectionManagerLCRUDController.abstract', 
+@smartContainer.Service({ id: 'persist.CollectionManagerLCRUDController.abstract', 
     interfaces: [PersistInterfaces.EntityCollectionManager],
  })
 export class CollectionManagerLCRUDController {
-    @Inject('todo-entityManager-reference')
+    @smartContainer.Inject('todo-entityManager-reference')
     entityManager: EntityCollectionManagerInterface = undefined as unknown as EntityCollectionManagerInterface;
 
     getRequestUserData(request: any) {

@@ -1,13 +1,13 @@
 import express from 'express';
 import { Controller, Route } from '../http/decorators';
-import { Service, SmartContainer } from '../library';
+import { smartContainer } from '../library';
 import { debugRequestHandler } from './mern-stack.server/express';
 
 @Controller({
     rootPath: '/sandbox/express',
     isSubApp: true,
 })
-@Service({
+@smartContainer.Service({
     id: 'SandboxController1',
     priority: 100,
     bundleId: 'express'
@@ -30,7 +30,7 @@ class SandboxController1 {
     }
 }
 
-const container = new SmartContainer({
+const container = new smartContainer.SmartContainer({
     bundleIds: { express: true },
 });
 
