@@ -1,14 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { EntityValidationError, Model, Property, PropertyValidationError, Validator, type ModelDefinition } from "./decorators";
-import { getModelDefinition, standardEntityValidation, prepareDataForMutation } from "./services";
+import { getModelDefinition, standardEntityValidation, prepareDataForMutation, makeValidatingEntity } from "./services";
 
 @Model({
     collection: 'testCollection',
     name: 'testModel',
 })
 class BaseModel {
-    @Property({ isRequired: true })
-    name?: string;
+    @Property({ isRequired: true, validate: (v) => v === 'force-error' ? new PropertyValidationError({property: 'name', message: 'force-error'}) : undefined })
+    name?: string =  '';
     @Property({ isTypeOf: ['number'] })
     age = 0;
     @Property({ isArray: true, isTypeOf: ['string'] })
@@ -119,6 +119,27 @@ describe('entity/services', () => {
                 contextName: 'force-error2 detected',
                 message: 'model.staticValidator',
                 properties: undefined
+            });
+        });
+
+        describe('#makeValidatingEntity()', () => {
+            it('validates properties on set', () => {
+                const entity = baseModelDef.hydrateEntity({ name: 'Test', age: 30 });
+                try {
+                    entity.name = undefined;
+                    throw new Error('expected error');
+                } catch (error: any) {
+                    expect(error).toBeInstanceOf(PropertyValidationError);
+                    expect(error.message).toEqual('property-required (actual: undefined OR null)')
+                }
+
+                try {
+                    entity.name = 'force-error';
+                    throw new Error('expected error');
+                } catch (error: any) {
+                    expect(error).toBeInstanceOf(PropertyValidationError);
+                    expect(error.message).toEqual('force-error')
+                }
             });
         });
     });

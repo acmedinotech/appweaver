@@ -95,7 +95,7 @@ export const standardPropertyValidation = (value: any, propertyName: string, mod
     }
 
     if (errors.length > 0) {
-        return new PropertyValidationError(propertyName, errors.join('; '), modelDef.getModelId());
+        return new PropertyValidationError({property: propertyName, message: errors.join('; '), contextName: modelDef.getModelId()});
     }
 
     return undefined;
@@ -254,6 +254,28 @@ export const hydrateEntityWithRelations = ({ entity: _entity, modelDef, data }: 
     return entity;
 }
 
+/**
+ * Wraps entity in a Proxy that validates properties on set.
+ */
+export const makeValidatingEntity = <Entity extends object>(modelDef: ModelDefinition, entity: Entity): Entity => {
+    return new Proxy(entity, {
+        set: (target, prop, value) => {
+            const key = prop as keyof typeof target;
+            if (!modelDef.properties[key as string]) {
+                target[key] = value;
+                return true;
+            }
+
+            const isError = modelDef.properties[key as string].validate(value, key as string, modelDef);
+            if (isError) {
+                throw isError;
+            }
+            target[key] = value;
+            return true;
+        }
+    }) as typeof entity;
+}
+
 const modelDefCache: Record<string, ModelDefinition> = {};
 
 /**
@@ -270,7 +292,7 @@ export const makeModelDefinition = (allDecs: ClassDecoratorMap): ModelDefinition
     const validatorStaticMethod = Object.keys(allDecs.methodsStatic[EntityDecorators.Validator])[0];
 
     const properties = Object.entries(propsForDecorator).reduce((acc, [property, metadata]) => {
-        const { decode = passthruDecode, encode = passthruEncode, validate: validateFn = () => undefined } = metadata;
+        const { decode = passthruDecode, encode = passthruEncode, validate: validateFn = () => undefined, ...rest } = metadata;
         acc[property] = {
             name: metadata.name ?? property,
             decode,
@@ -279,7 +301,7 @@ export const makeModelDefinition = (allDecs: ClassDecoratorMap): ModelDefinition
                 return standardPropertyValidation(value, propDefName ?? property, modelDef)
                     ?? validateFn(value, property, modelDef) ?? undefined;
             },
-            ...metadata
+            ...rest
         };
         return acc;
     }, {} as ModelDefinition['properties']);
@@ -294,11 +316,11 @@ export const makeModelDefinition = (allDecs: ClassDecoratorMap): ModelDefinition
     }
 
     const hydrateEntity = (data: Record<string, any>, entity?: any) => {
-        return hydrateEntityWithRelations({
+        return makeValidatingEntity(modelDef,hydrateEntityWithRelations({
             modelDef,
             data,
             entity,
-        });
+        }));
     }
 
     const dehydrateEntity = (entity: any, options?: DehydrateOptions) => {

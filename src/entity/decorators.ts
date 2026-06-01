@@ -45,7 +45,7 @@ export class PropertyValidationError extends AppWeaverError {
     static readonly errorType = 'entity.property.validation-error';
     propertyName: string;
     
-    constructor(property: string, message: string, contextName: string = PropertyValidationError.errorType) {
+    constructor({property, message, contextName = PropertyValidationError.errorType}: {property: string, message: string, contextName?: string}) {
         super(message, contextName);
         this.propertyName = property;
     }
