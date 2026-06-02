@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { EntityValidationError, Model, Property, PropertyValidationError, Validator, type ModelDefinition } from "./decorators";
-import { getModelDefinition, standardEntityValidation, prepareDataForMutation, makeValidatingEntity } from "./services";
+import { EntityValidationError, Model, Property, PropertyValidationError, Validator, type ModelDefinition } from "./decorators-types";
+import { getModelDefinition, standardEntityValidation, prepareDataForMutation, makeStandardEntity, makeObservableEntity } from "./services";
+import { after } from "node:test";
 
 @Model({
     collection: 'testCollection',
@@ -78,10 +79,9 @@ describe('entity/services', () => {
         })
         class ModelWithInstanceValidator extends BaseModel {
             @Validator()
-            validateEntity(modelDef: ModelDefinition) {
+            validate(modelDef: ModelDefinition) {
                 if (this.name === 'force-error')
                     return new EntityValidationError('force-error detected', 'model.instanceValidator');
-                return standardEntityValidation(modelDef, this);
             }
         }
 
@@ -91,15 +91,14 @@ describe('entity/services', () => {
         })
         class ModelWithStaticValidator extends BaseModel {
             @Validator()
-            static validateEntity(modelDef: ModelDefinition, entity: any) {
+            static validate(modelDef: ModelDefinition, entity: any) {
                 if (entity.name === 'force-error-static')
                     return new EntityValidationError('model.staticValidator', 'force-error2 detected');
-                return standardEntityValidation(modelDef, entity);
             }
         }
 
         it('invokes instance validateEntity() (asserts: @Validator() instance method)', () => {
-            const modelDef = getModelDefinition(ModelWithInstanceValidator) as ModelDefinition;;
+            const modelDef = getModelDefinition(ModelWithInstanceValidator) as ModelDefinition;
             const entity = modelDef.hydrateEntity({ name: 'force-error', age: 30 });
             const validationError = modelDef.validateEntity(entity);
 
@@ -122,12 +121,12 @@ describe('entity/services', () => {
             });
         });
 
-        describe('#makeValidatingEntity()', () => {
+        describe('#makeStandardEntity()', () => {
+            const entity = (getModelDefinition(ModelWithInstanceValidator) as ModelDefinition).hydrateEntity({ name: 'Test', age: 30 });
             it('validates properties on set', () => {
-                const entity = baseModelDef.hydrateEntity({ name: 'Test', age: 30 });
                 try {
                     entity.name = undefined;
-                    throw new Error('expected error');
+                    throw new Error('expected error for undefined');
                 } catch (error: any) {
                     expect(error).toBeInstanceOf(PropertyValidationError);
                     expect(error.message).toEqual('property-required (actual: undefined OR null)')
@@ -135,11 +134,59 @@ describe('entity/services', () => {
 
                 try {
                     entity.name = 'force-error';
-                    throw new Error('expected error');
+                    throw new Error('expected error for force-error');
                 } catch (error: any) {
                     expect(error).toBeInstanceOf(PropertyValidationError);
                     expect(error.message).toEqual('force-error')
+                    expect(entity.name).toBe('force-error');
                 }
+            });
+
+            it('throws error on assertValidEntity()', () => {
+                try {
+                    entity.$assertValidEntity();
+                    throw new Error('expected error for invalid entity');
+                } catch (error: any) {
+                    expect(error).toBeInstanceOf(EntityValidationError);
+                }
+            });
+        });
+
+        describe('#makeObservableEntity()', () => {
+            const modelDef = getModelDefinition(ModelWithInstanceValidator) as ModelDefinition;
+            const entity = makeObservableEntity<ModelWithInstanceValidator>(modelDef, modelDef.hydrateEntity({ name: 'Test', age: 30 }));
+            const events: string[] = [];
+            
+            const unsub1 = entity.$observeWith((key, value) => {
+                events.push(`all: ${key}=${value}`)
+            });
+            const unsub2 = entity.$observeWith((key, value) => {
+                events.push(`one: ${key}=${value}`)
+            }, 'age');
+            const unsub3 = entity.$observeWith((key, value) => {
+                events.push(`mny: ${key}=${value}`)
+            }, ['name', 'streetAddresses']);
+
+            it('triggers expected observers in order', () => {
+                entity.name = 'name1';
+                entity.age = -1;
+                entity.streetAddresses = ['xyz'];
+                expect(events).toEqual([
+                    'mny: name=name1',
+                    'all: name=name1',
+                    'one: age=-1',
+                    'all: age=-1',
+                    'mny: streetAddresses=xyz',
+                    'all: streetAddresses=xyz'
+                  ]);
+            });
+
+            it('unsubscribes observers', () => {
+                unsub1();
+                unsub2();
+                unsub3();
+                entity.name = 'name2';
+                expect(events.length).toEqual(6)
             });
         });
     });

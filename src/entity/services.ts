@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getClassForGuid, getGuid, getInheritedClassDecoratorMap, type ClassDecoratorMap } from "../decorator-registry";
-import { EntityDecorators, EntityValidationError, getModelGuidByEmid, PropertyValidationError, type DehydrateOptions, type EntityValidatorFn, type IdExtractorFn, type ModelDefinition, type PropertyMetadata } from "./decorators";
+import { EntityDecorators, EntityValidationError, getModelGuidByEmid, PropertyValidationError, type DehydrateOptions, type EntityValidatorFn, type IdExtractorFn, type ModelDefinition, type ObservableEntity, type PropertyMetadata, type PropertyObserverFn, type StandardEntity } from "./decorators-types";
 
 export const passthruDecode = (value: any) => value;
 export const passthruEncode = (value: any) => value;
@@ -89,7 +89,7 @@ export const standardPropertyValidation = (value: any, propertyName: string, mod
     // @todo allow `!type` syntax?
     if (isTypeOf && sampleValue !== undefined) {
         const stype = typeof sampleValue;
-        if ((!isTypeOf.includes(stype) || !isTypeOf.includes('*'))) {
+        if ((!isTypeOf.includes(stype) && !isTypeOf.includes('*'))) {
             errors.push(`property-typeOf (expected: [${isTypeOf.join(', ')}], actual: ${stype})`)
         }
     }
@@ -129,12 +129,8 @@ export const standardEntityValidation: EntityValidatorFn = (modelDef, entity) =>
 
 const __uuid_keys: Record<string, boolean> = { _id: true, id: true };
 
-/**
- * Produces a map of key-value pairs that define an entity.
- */
 export const PROP_REL_ENCODING = '_rel_encType';
 export const PROP_REL_EMID = '_rel_emid';
-
 export const UUID_DEFAULT_PREFIX = '*';
 export const VALUE_UNDEFINED_PREFIX = '*undefined:';
 
@@ -255,10 +251,12 @@ export const hydrateEntityWithRelations = ({ entity: _entity, modelDef, data }: 
 }
 
 /**
- * Wraps entity in a Proxy that validates properties on set.
+ * Validating entity exhibits the following behaviors:
+ * 
+ * - if an invalid value is given, it's set before PropertyValidationError is thrown
  */
-export const makeValidatingEntity = <Entity extends object>(modelDef: ModelDefinition, entity: Entity): Entity => {
-    return new Proxy(entity, {
+export const makeStandardEntity = <Entity extends object>(modelDef: ModelDefinition, entity: Entity): Entity & StandardEntity => {
+    const proxy =  new Proxy(entity, {
         set: (target, prop, value) => {
             const key = prop as keyof typeof target;
             if (!modelDef.properties[key as string]) {
@@ -266,14 +264,73 @@ export const makeValidatingEntity = <Entity extends object>(modelDef: ModelDefin
                 return true;
             }
 
+            target[key] = value;
             const isError = modelDef.properties[key as string].validate(value, key as string, modelDef);
             if (isError) {
                 throw isError;
             }
-            target[key] = value;
             return true;
         }
-    }) as typeof entity;
+    }) as typeof entity & StandardEntity;
+
+    // @todo implement ModelMetadata.idKey
+    proxy.$id = () => {
+        return entity[modelDef.idKey ?? 'id'];
+    }
+
+    proxy.$emid = () => modelDef.getModelId()
+
+    proxy.$assertValidEntity = () => {
+        const error = modelDef.validateEntity(modelDef, entity);
+        if (error) throw error;
+    }
+
+    return proxy;
+}
+
+export const makeObservableEntity = <Entity extends object>(modelDef: ModelDefinition, entity: Entity): Entity & ObservableEntity => {
+    const observers: Record<string, PropertyObserverFn[]> = {};
+
+    const notifyObservers = (key: string, value: any) => {
+        [ ...(observers[key as string] ?? []), ...(observers['*'] ?? []) ].forEach(
+            (observer, idx) => {
+                try {
+                    observer(key as string, value)
+                } catch (error) {
+                    console.error('🟠 observableEntity.error.observer', { error, observer, observerIndex: idx, key, value });
+                }
+            }
+        );
+    }
+
+    const proxy = new Proxy(entity, {
+        set: (target, prop, value) => {
+            const key = prop as string;
+            target[key as keyof typeof target] = value;
+
+            if (modelDef.properties[key]) {
+                notifyObservers(key, value);
+            }
+
+            return true;
+        }
+    }) as typeof entity & ObservableEntity;
+
+    proxy.$observeWith = (observer, onProperties) => {
+        const keys = (onProperties === '*' || onProperties === undefined) ? ['*'] : (Array.isArray(onProperties) ? onProperties : [onProperties]);
+        for (const key of keys) {
+            if (!observers[key]) observers[key] = [];
+            observers[key].push(observer);
+        }
+
+        return () => {
+            for (const key of keys) {
+                observers[key] = observers[key].filter(o => o !== observer);
+            }
+        };
+    }
+
+    return proxy;
 }
 
 const modelDefCache: Record<string, ModelDefinition> = {};
@@ -307,16 +364,17 @@ export const makeModelDefinition = (allDecs: ClassDecoratorMap): ModelDefinition
     }, {} as ModelDefinition['properties']);
 
     const validateEntity = (entity: any) => {
+        let error: any;
         if (validatorInstMethod && entity[validatorInstMethod]) {
-            return entity[validatorInstMethod](modelDef);
+            error = entity[validatorInstMethod](modelDef);
         } else if (validatorStaticMethod && entity.constructor[validatorStaticMethod]) {
-            return entity.constructor[validatorStaticMethod](modelDef, entity);
+            error = entity.constructor[validatorStaticMethod](modelDef, entity);
         }
-        return standardEntityValidation(modelDef, entity);
+        return error ?? standardEntityValidation(modelDef, entity);
     }
 
     const hydrateEntity = (data: Record<string, any>, entity?: any) => {
-        return makeValidatingEntity(modelDef,hydrateEntityWithRelations({
+        return makeStandardEntity(modelDef,hydrateEntityWithRelations({
             modelDef,
             data,
             entity,

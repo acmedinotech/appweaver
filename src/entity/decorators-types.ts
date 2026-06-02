@@ -9,6 +9,7 @@ export enum EntityDecorators {
 
 export type ModelMetadata = {
     name: string;
+    idKey?: string;
     collection?: string;
     relations?: any;
 }
@@ -150,14 +151,36 @@ export const Property = (metadata: Partial<PropertyMetadata> = {}) => {
  * @param modelDef If undefined, convention dictates that method contains a default modelDef (or returns undefined)
  * @returns 
  */
-export type EntityValidatorFn = ( modelDef: ModelDefinition,entity?: any) => undefined | AppWeaverError;
+export type EntityValidatorFn = ( modelDef: ModelDefinition, entity?: object) => undefined | AppWeaverError;
 
 export type IdExtractorFn = (entity: any, keys: string[], propMeta: PropertyMetadata, modelDef?: ModelDefinition) => Record<string, any>;
+
+export type HydrateOptions = {
+    /** If true, no enhancements (e.g. injecting StandardEntity methods) are applied to the entity. */
+    isSparse?: boolean;
+}
 
 export type DehydrateOptions = {
     idExtractor?: IdExtractorFn;
     depth?: number;
 }
+
+export interface StandardEntity {
+    $id: () => string|undefined;
+    $emid: () => string;
+    $assertValidEntity: () => void;
+}
+
+export interface ObservableEntity {
+    /**
+     * @param observer 
+     * @param onProperties If undefined or `*`, observe all properties. Otherwise, observe explicit key(s).
+     * @returns Unsubscribe function.
+     */
+    $observeWith: (observer: PropertyObserverFn, onProperties?: string|string[]) => () => void;
+}
+
+export type PropertyObserverFn = (property: string, value: any) => void;
 
 /**
  * Provides hydration/validation/dehydration lifecycle management
@@ -167,7 +190,7 @@ export interface ModelDefinition extends ModelMetadata {
     getModelId: () => string;
     createInstance: () => any;
     validateEntity: EntityValidatorFn;
-    hydrateEntity: (fromData: Record<string, any>) => any;
+    hydrateEntity: <Entity=object>(fromData: Record<string, any>, options?: HydrateOptions) => Entity & StandardEntity;
     dehydrateEntity: (entity: any, options?: DehydrateOptions) => Record<string, any>[];
     removeReadOnly: (data: Record<string, any>) => Record<string, any>;
     /**
@@ -188,7 +211,7 @@ export interface ModelDefinition extends ModelMetadata {
 // @todo move to services
 export const hydrateAndValidateEntity = (modelDef: ModelDefinition, fromData: Record<string, any>) => {
     const entity = modelDef.hydrateEntity(fromData);
-    const error = modelDef.validateEntity(entity);
+    const error = modelDef.validateEntity(modelDef, entity);
     if (error) { throw error; }
     return entity;
 }

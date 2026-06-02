@@ -1,5 +1,5 @@
 import { registerClassDecorator } from "../decorator-registry";
-import { DEFAULT_COLLECTION } from "../entity/decorators";
+import { DEFAULT_COLLECTION } from "../entity/decorators-types";
 
 export enum PersistInterfaces {
     EntityCollectionManager = 'persist.EntityCollectionManager',

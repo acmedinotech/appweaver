@@ -4,7 +4,7 @@ import { smartContainer } from "../../library";
 import type { EntityCollectionManagerInterface, GetManyResults } from "../../persist/decorators";
 import { CollectionManagerLCRUDController as CollectionManagerAPIController } from "../../persist/services";
 import { getMongodbConfigFromEnvVars, makeMongodbClientWrapper, type MongodbWrapper } from "./mongo";
-import { getModelDefinitionGuid, hydrateAndValidateEntity, Model, Property, type ModelDefinition } from "../../entity/decorators";
+import { getModelDefinitionGuid, hydrateAndValidateEntity, Model, Property, type HydrateOptions, type ModelDefinition } from "../../entity/decorators-types";
 import { getModelDefinitionByGuid } from "../../entity/services";
 import { getClassForGuid } from "../../decorator-registry";
 
@@ -12,6 +12,7 @@ import * as bundleExpressServer from './express';
 import express, { type NextFunction } from 'express';
 import cookieParser from "cookie-parser";
 import { randomUUID } from "node:crypto";
+import { AppWeaverError } from "../../constants";
 
 export const bundleId = 'appweaver.sandbox.mern-stack';
 export const idEntityManager = `${bundleId}.mongoEntityManager`;
@@ -54,9 +55,10 @@ export class MongoEntityManager implements EntityCollectionManagerInterface {
         return this.modelDefCache[emid];
     }
 
-    makeModelInstance<EntityModel = any>(modelName: string, initialData?: Record<string, any>): EntityModel {
+    makeModelInstance<EntityModel = any>(modelName: string, initialData?: Record<string, any>, options?: HydrateOptions): EntityModel {
         return this.getModelDefinition(modelName)?.hydrateEntity(
-            { ...initialData ?? {}, [MongoEntityManager.propEntityModelId]: `${this.collectionName}@${modelName}` }
+            { ...initialData ?? {}, [MongoEntityManager.propEntityModelId]: `${this.collectionName}@${modelName}` },
+            options
         );
     }
 
@@ -99,7 +101,8 @@ export class MongoEntityManager implements EntityCollectionManagerInterface {
             injectData: this.makeEntityPropsFor({ modelName }, withProps),
         })
 
-        const entity = hydrateAndValidateEntity(modelDef, data)
+        const entity = modelDef.hydrateEntity<EntityModel>(data);
+        entity.$assertValidEntity();
         const result = await this.mongo.insertOne({
             collection: this.collectionName,
             record: data
@@ -110,9 +113,19 @@ export class MongoEntityManager implements EntityCollectionManagerInterface {
 
     async update<EntityModel = any>(modelName: string, userData: any, withConstraints: any = {}): Promise<EntityModel> {
         const modelDef = this.getModelDefinition(modelName);
+
+        const canonical = await this.getOne(modelName, withConstraints._id, withConstraints);
+        if (!canonical) {
+            throw new AppWeaverError(`Could not find ${modelName} (#${withConstraints._id})`, 'mern-stack.mongo.update', {modelName, withConstraints});
+        }
+
+        const entity = modelDef.hydrateEntity<EntityModel>(canonical);
         const { data, removed } = modelDef.prepareData('update', userData, {
             removeKeys: PROP_SYS_MANAGED_KEYS,
         });
+
+        Object.assign(entity, data);
+        entity.$assertValidEntity();
 
         const { _id } = removed
         await this.mongo.updateOne({
