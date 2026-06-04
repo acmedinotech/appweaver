@@ -55,16 +55,7 @@ export const getModelDefinitionGuid = (name: string, collection = DEFAULT_COLLEC
 export const getModelGuidByEmid = (emid: string) => modelToGuid[emid];
 export const getModelDefinitionsByCollection = (collection = DEFAULT_COLLECTION) => collectionToGuids[collection] ?? [];
 
-/**
- * Due to observed runtime behavior of array checks taking too long to complete during a `var = val` statement,
- * only the quickest validations are performed here. Use {@see corePropertyValidation} for complete validation.
- * @param value 
- * @param propertyName 
- * @param propMeta 
- * @param emid 
- * @returns 
- */
-export const quickPropertyValidation = (value: any, propertyName: string, propMeta: PropertyMetadata, emid: string) => {
+export const standardPropertyValidation =  (value: any, propertyName: string, propMeta: PropertyMetadata, emid: string) => {
     const { isRequired, isTypeOf, isArray } = propMeta;
     let errors: string[] = [];
 
@@ -78,18 +69,6 @@ export const quickPropertyValidation = (value: any, propertyName: string, propMe
         errors.push(`property-array (expected: array, actual: ${typeof value})`);
     }
 
-    if (errors.length > 0) {
-        return new PropertyValidationError({property: propertyName, message: errors.join('; '), contextName: emid});
-    }
-
-    return undefined;
-};
-
-export const standardPropertyValidation =  (value: any, propertyName: string, propMeta: PropertyMetadata, emid: string) => {
-    let quickErrors = quickPropertyValidation(value, propertyName, propMeta, emid);
-    if (quickErrors) return quickErrors;
-
-    const { isTypeOf, isArray } = propMeta;
     if (!isTypeOf || isTypeOf.length == 0 || isTypeOf.includes('*')) return undefined;
 
     let valTypes = [typeof value];
@@ -100,8 +79,13 @@ export const standardPropertyValidation =  (value: any, propertyName: string, pr
     const matchSet = new Set(isTypeOf);
     const valSet = new Set(valTypes);
     const diff = valSet.difference(matchSet);
-    if (diff.size > 0)
-        return new PropertyValidationError({property: propertyName, message: `property-typeOf (expected: [${isTypeOf.join(', ')}], actual: [${valTypes.join(', ')}])`, contextName: emid});
+    if (diff.size > 0) {
+        errors.push(`property-typeOf (expected: [${isTypeOf.join(', ')}], actual: [${valTypes.join(', ')}])`);
+    }
+    
+    if (errors.length > 0) {
+        return new PropertyValidationError({property: propertyName, message: errors.join('; '), contextName: emid});
+    }
 
     return propMeta.validate?.(value, propertyName);
 }
