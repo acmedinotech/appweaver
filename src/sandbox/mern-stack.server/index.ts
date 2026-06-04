@@ -4,9 +4,8 @@ import { smartContainer } from "../../library";
 import type { EntityCollectionManagerInterface, GetManyResults } from "../../persist/decorators";
 import { CollectionManagerLCRUDController as CollectionManagerAPIController } from "../../persist/services";
 import { getMongodbConfigFromEnvVars, makeMongodbClientWrapper, type MongodbWrapper } from "./mongo";
-import { getModelDefinitionGuid, hydrateAndValidateEntity, Model, Property, type HydrateOptions, type ModelDefinition } from "../../entity/decorators-types";
+import { getModelDefinitionGuid, Model, Property, type HydrateOptions, type ModelDefinition } from "../../entity/decorators-types-core";
 import { getModelDefinitionByGuid } from "../../entity/services";
-import { getClassForGuid } from "../../decorator-registry";
 
 import * as bundleExpressServer from './express';
 import express, { type NextFunction } from 'express';
@@ -92,7 +91,7 @@ export class MongoEntityManager implements EntityCollectionManagerInterface {
             mapTo: (doc) => modelDef.hydrateEntity(doc as Record<string, any>),
         })
 
-        return { items: entities, modelName };
+        return { items: entities as EntityModel[], modelName };
     }
 
     async create<EntityModel = any>(modelName: string, userData: any, withProps: Record<string, any> = {}): Promise<EntityModel> {

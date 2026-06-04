@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getClassForGuid, getGuid, getInheritedClassDecoratorMap, type ClassDecoratorMap } from "../decorator-registry";
-import { EntityDecorators, EntityValidationError, getModelGuidByEmid, PropertyValidationError, type DehydrateOptions, type EntityValidatorFn, type IdExtractorFn, type ModelDefinition, type ObservableEntity, type PropertyMetadata, type PropertyObserverFn, type StandardEntity } from "./decorators-types";
+import { quickPropertyValidation, EntityDecorators, EntityValidationError, getModelGuidByEmid, PropertyValidationError, type DehydrateOptions, type EntityValidatorFn, type IdExtractorFn, type ModelDefinition, type ObservableEntity, type PropertyMetadata, type PropertyObserverFn, type StandardEntity, standardPropertyValidation } from "./decorators-types-core";
 
 export const passthruDecode = (value: any) => value;
 export const passthruEncode = (value: any) => value;
@@ -62,70 +62,8 @@ export const prepareDataForMutation = (modelDef: ModelDefinition, mode: 'create'
     return result;
 }
 
-export const standardPropertyValidation = (value: any, propertyName: string, modelDef: ModelDefinition) => {
-    const { isRequired, isTypeOf, isArray } = modelDef.properties[propertyName];
-    let errors: string[] = [];
-
-    // case: assert isRequired (!undefined && !null)
-    if (isRequired && (value === undefined || value === null)) {
-        errors.push(`property-required (actual: undefined OR null)`)
-    }
-
-    let sampleValue = value;
-    // case: assert isArray on value
-    if (isArray) {
-        if (!Array.isArray(value)) {
-            errors.push(`property-array (expected: array, actual: ${typeof value})`);
-        } else {
-            // case: assert isTypeOf on first array value
-            // unsupported: multi-type checking on multiple values: must be done by caller via @Validator if required
-            sampleValue = value[0];
-            // @todo use Set type to store & compare all typeofs
-        }
-    }
-
-    // case: since isRequired enforces value !== undefined, we will only check type if value
-    // is not undefined (this allows for optional properties where `null` is an explictly allowed value).
-    // @todo allow `!type` syntax?
-    if (isTypeOf && sampleValue !== undefined) {
-        const stype = typeof sampleValue;
-        if ((!isTypeOf.includes(stype) && !isTypeOf.includes('*'))) {
-            errors.push(`property-typeOf (expected: [${isTypeOf.join(', ')}], actual: ${stype})`)
-        }
-    }
-
-    if (errors.length > 0) {
-        return new PropertyValidationError({property: propertyName, message: errors.join('; '), contextName: modelDef.getModelId()});
-    }
-
-    return undefined;
-};
-
-/**
- * Applies property validation on the @Model instance with an explicit ModelDefinition with the following rules:
- * 
- * @param entity 
- * @param modelDef 
- * @returns Root `propertyName` is `{modelDef.collection}@{modelDef.name}` and `payload` elements are 
- * `{ propertyName: {propertyName} }`
- */
-export const standardEntityValidation: EntityValidatorFn = (modelDef, entity) => {
-    if (!modelDef) return undefined;
-
-    const emid = modelDef.getModelId();
-    const errors: Record<string, any> = {};
-    for (const [propName, propDef] of Object.entries(modelDef.properties)) {
-        const error = propDef.validate(entity[propName], propName, modelDef);
-        if (error) {
-            errors[propName] = error.toJson();
-        }
-    }
-
-    if (Object.keys(errors).length == 0)
-        return undefined;
-
-    return new EntityValidationError('entity-validation-failed: see properties', emid, errors)
-}
+// export const standardPropertyValidation = (value: any, propertyName: string, modelDef: ModelDefinition) => 
+//     quickPropertyValidation(value, propertyName, modelDef.properties[propertyName], modelDef.getEmid());
 
 const __uuid_keys: Record<string, boolean> = { _id: true, id: true };
 
@@ -223,6 +161,8 @@ export const hydrateEntityWithRelations = ({ entity: _entity, modelDef, data }: 
     const entity = _entity ?? (modelDef.createInstance());
 
     Object.entries(modelDef.properties).forEach(([propName, propDef]) => {
+        if (data[propName] === undefined) return;
+
         const value = data[propName];
         if (propDef.relationship) {
             const { relType, emid: emidDefault } = propDef.relationship;
@@ -248,44 +188,6 @@ export const hydrateEntityWithRelations = ({ entity: _entity, modelDef, data }: 
     })
 
     return entity;
-}
-
-/**
- * Validating entity exhibits the following behaviors:
- * 
- * - if an invalid value is given, it's set before PropertyValidationError is thrown
- */
-export const makeStandardEntity = <Entity extends object>(modelDef: ModelDefinition, entity: Entity): Entity & StandardEntity => {
-    const proxy =  new Proxy(entity, {
-        set: (target, prop, value) => {
-            const key = prop as keyof typeof target;
-            if (!modelDef.properties[key as string]) {
-                target[key] = value;
-                return true;
-            }
-
-            target[key] = value;
-            const isError = modelDef.properties[key as string].validate(value, key as string, modelDef);
-            if (isError) {
-                throw isError;
-            }
-            return true;
-        }
-    }) as typeof entity & StandardEntity;
-
-    // @todo implement ModelMetadata.idKey
-    proxy.$id = () => {
-        return entity[modelDef.idKey ?? 'id'];
-    }
-
-    proxy.$emid = () => modelDef.getModelId()
-
-    proxy.$assertValidEntity = () => {
-        const error = modelDef.validateEntity(modelDef, entity);
-        if (error) throw error;
-    }
-
-    return proxy;
 }
 
 export const makeObservableEntity = <Entity extends object>(modelDef: ModelDefinition, entity: Entity): Entity & ObservableEntity => {
@@ -345,40 +247,25 @@ export const makeModelDefinition = (allDecs: ClassDecoratorMap): ModelDefinition
     const propsForDecorator = allDecs.properties[EntityDecorators.Property] ?? {};
     const guid = allDecs.guid;
 
-    const validatorInstMethod = Object.keys(allDecs.methods[EntityDecorators.Validator])[0];
-    const validatorStaticMethod = Object.keys(allDecs.methodsStatic[EntityDecorators.Validator])[0];
-
     const properties = Object.entries(propsForDecorator).reduce((acc, [property, metadata]) => {
         const { decode = passthruDecode, encode = passthruEncode, validate: validateFn = () => undefined, ...rest } = metadata;
         acc[property] = {
             name: metadata.name ?? property,
             decode,
             encode,
-            validate: (value: any, propDefName) => {
-                return standardPropertyValidation(value, propDefName ?? property, modelDef)
-                    ?? validateFn(value, property, modelDef) ?? undefined;
-            },
+            validate: (value: any, propDefName) => 
+                standardPropertyValidation(value, propDefName, metadata as PropertyMetadata, emid),
             ...rest
         };
         return acc;
     }, {} as ModelDefinition['properties']);
 
-    const validateEntity = (entity: any) => {
-        let error: any;
-        if (validatorInstMethod && entity[validatorInstMethod]) {
-            error = entity[validatorInstMethod](modelDef);
-        } else if (validatorStaticMethod && entity.constructor[validatorStaticMethod]) {
-            error = entity.constructor[validatorStaticMethod](modelDef, entity);
-        }
-        return error ?? standardEntityValidation(modelDef, entity);
-    }
-
     const hydrateEntity = (data: Record<string, any>, entity?: any) => {
-        return makeStandardEntity(modelDef,hydrateEntityWithRelations({
+        return hydrateEntityWithRelations({
             modelDef,
             data,
             entity,
-        }));
+        });
     }
 
     const dehydrateEntity = (entity: any, options?: DehydrateOptions) => {
@@ -408,8 +295,7 @@ export const makeModelDefinition = (allDecs: ClassDecoratorMap): ModelDefinition
         collection: modelMeta.collection,
         ...modelMeta,
         properties,
-        getModelId: () => emid,
-        validateEntity,
+        getEmid: () => emid,
         hydrateEntity,
         dehydrateEntity,
         removeReadOnly,
