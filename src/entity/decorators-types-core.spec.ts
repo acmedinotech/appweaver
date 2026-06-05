@@ -6,99 +6,111 @@ describe('entity/decorators-types-core', () => {
     describe('#standardPropertyValidation', () => {
         const isRequiredScenarios = [
             {
-                title: "fails on null (required=true)",
+                title: "isRequired: fails on value=null",
                 isRequired: true,
                 value: null,
                 errorMessage:'property-required (actual: null)'
             },
             {
-                title: "fails on undefined (required=true)",
+                title: "isRequired: fails on value=undefined",
                 isRequired: true,
                 value: undefined,
                 errorMessage:'property-required (actual: undefined)'
             },
             {
-                title: "succeeds on null (required=false)",
+                title: "isRequired: succeeds on value=null",
                 isRequired: false,
                 value: null,
-                errorMessage: undefined
             },
         ];
         const isArrayScenarios = [
             {
-                title: "succeeds on [undefined,null, [], ['a']] (array=true)",
+                title: "isArray: succeeds on value=[undefined,null, [], ['a']]",
                 isArray: true,
                 multiValues: [undefined, null, [], ['a']],
-                errorMessage: undefined
             },
             {
-                title: "fails on non-array (array=true)",
+                title: "isArray: fails on value=non-array",
                 isArray: true,
                 value: 'a',
                 errorMessage: 'property-array (actual: string)'
             }
         ] as any[];
+
+        const multiValues = [undefined, null, {}, [], 'a', 1, true, false];
         const isTypeOfScenarios = [
             {
-                title: "succeeds on isTypeOf=undefined",
-                multiValues: [undefined, 1, "a"]
+                title: "isTypeOf: succeeds when undefined",
+                isArray: true,
+                values: multiValues
             },
             {
-                title: "succeeds on isTypeOf=[]",
-                multiValues: [undefined, 1, "a"]
+                title: "isTypeOf:succeeds when []",
+                isArray: true,
+                values: multiValues
             },
             {
-                title: "succeeds on isTypeOf='*'",
-                multiValues: [undefined, 1, "a"],
-                isTypeOf: '*'
+                title: "isTypeOf: succeeds when *",
+                isArray: true,
+                isTypeOf: '*',
+                values: multiValues,
             },
             {
-                title: "succeeds on isTypeOf=['*']",
+                title: "isTypeOf: succeeds when [*]",
                 multiValues: [undefined, 1, "a"],
                 isTypeOf: ['*']
             },
             {
-                title: "errors on isTypeOf=boolean",
+                title: "isTypeOf: fails when boolean",
                 multiValues: [undefined],
                 isTypeOf: "boolean",
                 errorMessage: "property-typeOf-[boolean] (actual: [undefined])"
             },
             {
-                title: "errors on isTypeOf=[boolean]",
+                title: "isTypeOf: fails when [boolean]",
                 multiValues: [undefined],
                 isTypeOf: ["boolean"],
                 errorMessage: "property-typeOf-[boolean] (actual: [undefined])"
             },
             {
-                title: "succeeds on isTypeOf=[number,string]",
+                title: "isTypeOf: succeeds when [number,string]",
                 value: [1, "a", 1.1],
                 isArray: true,
                 isTypeOf: ['number', 'string']
             },
             {
-                title: "fails on isTypeOf=[number,string]",
+                title: "isTypeOf: fails when [number,string]",
                 isArray: true,
                 isTypeOf: ['number', 'string'],
                 value: [1, "a", false],
                 errorMessage: "property-typeOf-[number, string] (actual: [number, string, boolean])"
             },
         ];
+
+        const fixedValues = { 2: 'two', 'b': 'bapple' };
         const fixedValuesScenarios = [
             {
-                title: "🚨 missing fixedValuesScenarios",
+                title: "fixedValues: succeeds on valid values",
+                multiValues: ['2', 'b', , ['2', 'b']],
+                fixedValues,
+            },
+            {
+                title: "fixedValues: fails on invalid values",
+                multiValues: [1, ['a']],
+                fixedValues,
+                errorMessage: "property-fixedValues (see `properties.test-key`)"
             }
         ];
-
-        const validate = (v) => {
+        const validate = (v: any) => {
             if (v === 'do-error') return new PropertyValidationError({property: 'test', message: 'do-error triggered'})
         }
         const customValidateScenarios = [
             {
-                title: "succeeds on custom validate()",
+                title: "validate: succeeds on custom validator",
                 validate
             },
             {
-                title: "fails on custom validate()",
+                title: "validate: fails on custom validator",
                 validate,
                 value: 'do-error',
                 errorMessage: 'do-error triggered'

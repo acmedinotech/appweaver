@@ -58,9 +58,15 @@ export const getModelDefinitionsByCollection = (collection = DEFAULT_COLLECTION)
 
 const _mytype = (v: any) => v === null ? 'null' : typeof v;
 
+const listsHaveDiffs = (list1: any[], list2: any[]) => {
+    return new Set(list1).difference(new Set(list2)).size > 0;
+}
+
 export const standardPropertyValidation =  (value: any, propertyName: string, propMeta: Partial<PropertyMetadata>, emid: string) => {
-    const { isRequired, isTypeOf, isArray } = propMeta;
+    const { isRequired, isTypeOf, isArray, fixedValues } = propMeta;
     let errors: string[] = [];
+    const errProperties: Record<string, string> = {};
+
     const _valType = _mytype(value);
 
     // case: assert isRequired (!undefined && !null)
@@ -74,6 +80,13 @@ export const standardPropertyValidation =  (value: any, propertyName: string, pr
             errors.push(`property-array (actual: ${_valType})`);
         }
 
+        if (fixedValues) {
+            const vals = value instanceof Array ? value : [value];
+            if (listsHaveDiffs(vals, Object.keys(fixedValues))) {
+                errors.push(`property-fixedValues (see \`properties.${propertyName}\`)`);
+                errProperties[propertyName] = Object.keys(fixedValues).join('; ');
+            }
+        }
         // @todo fixedValues
     }
 
@@ -84,10 +97,7 @@ export const standardPropertyValidation =  (value: any, propertyName: string, pr
             valTypes = value.map(_mytype);
         }
     
-        const matchSet = new Set(isTypeOf);
-        const valSet = new Set(valTypes);
-        const diff = valSet.difference(matchSet);
-        if (diff.size > 0) {
+        if (listsHaveDiffs(valTypes, _isTypeOf)) {
             errors.push(`property-typeOf-[${_isTypeOf.join(', ')}] (actual: [${valTypes.join(', ')}])`);
         }
     }
