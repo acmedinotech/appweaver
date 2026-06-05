@@ -55,34 +55,43 @@ export const getModelDefinitionGuid = (name: string, collection = DEFAULT_COLLEC
 export const getModelGuidByEmid = (emid: string) => modelToGuid[emid];
 export const getModelDefinitionsByCollection = (collection = DEFAULT_COLLECTION) => collectionToGuids[collection] ?? [];
 
-export const standardPropertyValidation =  (value: any, propertyName: string, propMeta: PropertyMetadata, emid: string) => {
+
+const _mytype = (v: any) => v === null ? 'null' : typeof v;
+
+export const standardPropertyValidation =  (value: any, propertyName: string, propMeta: Partial<PropertyMetadata>, emid: string) => {
     const { isRequired, isTypeOf, isArray } = propMeta;
     let errors: string[] = [];
+    const _valType = _mytype(value);
 
     // case: assert isRequired (!undefined && !null)
     if (isRequired && (value === undefined || value === null)) {
-        errors.push(`property-required (actual: ${typeof value})`)
+        errors.push(`property-required (actual: ${_valType})`)
     }
 
-    // case: assert isArray on value
-    if (isArray && !Array.isArray(value)) {
-        errors.push(`property-array (expected: array, actual: ${typeof value})`);
+    if (value !== undefined && value !== null) {
+        // case: assert isArray on value
+        if (isArray && !Array.isArray(value)) {
+            errors.push(`property-array (actual: ${_valType})`);
+        }
+
+        // @todo fixedValues
     }
 
-    if (!isTypeOf || isTypeOf.length == 0 || isTypeOf.includes('*')) return undefined;
-
-    let valTypes = [typeof value];
-    if (isArray) {
-        valTypes = value.map((v: any) => typeof v);
-    }
-
-    const matchSet = new Set(isTypeOf);
-    const valSet = new Set(valTypes);
-    const diff = valSet.difference(matchSet);
-    if (diff.size > 0) {
-        errors.push(`property-typeOf (expected: [${isTypeOf.join(', ')}], actual: [${valTypes.join(', ')}])`);
-    }
+    const _isTypeOf = typeof isTypeOf === 'string' ? [isTypeOf] : isTypeOf;
+    if (_isTypeOf && _isTypeOf.length > 0 && !_isTypeOf.includes('*')) {
+        let valTypes = [_valType];
+        if (isArray && value.length) {
+            valTypes = value.map(_mytype);
+        }
     
+        const matchSet = new Set(isTypeOf);
+        const valSet = new Set(valTypes);
+        const diff = valSet.difference(matchSet);
+        if (diff.size > 0) {
+            errors.push(`property-typeOf-[${_isTypeOf.join(', ')}] (actual: [${valTypes.join(', ')}])`);
+        }
+    }
+
     if (errors.length > 0) {
         return new PropertyValidationError({property: propertyName, message: errors.join('; '), contextName: emid});
     }
