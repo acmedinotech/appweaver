@@ -62,6 +62,9 @@ const listsHaveDiffs = (list1: any[], list2: any[]) => {
     return new Set(list1).difference(new Set(list2)).size > 0;
 }
 
+/**
+ * Applies @Property validation to specifications.
+ */
 export const standardPropertyValidation =  (value: any, propertyName: string, propMeta: Partial<PropertyMetadata>, emid: string) => {
     const { isRequired, isTypeOf, isArray, fixedValues } = propMeta;
     let errors: string[] = [];
@@ -78,16 +81,15 @@ export const standardPropertyValidation =  (value: any, propertyName: string, pr
         // case: assert isArray on value
         if (isArray && !Array.isArray(value)) {
             errors.push(`property-array (actual: ${_valType})`);
-        }
-
-        if (fixedValues) {
+        } else if (!isArray && Array.isArray(value)) {
+            errors.push(`property-not-array (actual: array; set \`isArray\`)`);
+        } else if (fixedValues) {
             const vals = value instanceof Array ? value : [value];
             if (listsHaveDiffs(vals, Object.keys(fixedValues))) {
                 errors.push(`property-fixedValues (see \`properties.${propertyName}\`)`);
                 errProperties[propertyName] = Object.keys(fixedValues).join('; ');
             }
         }
-        // @todo fixedValues
     }
 
     const _isTypeOf = typeof isTypeOf === 'string' ? [isTypeOf] : isTypeOf;
@@ -109,20 +111,22 @@ export const standardPropertyValidation =  (value: any, propertyName: string, pr
     return propMeta.validate?.(value, propertyName);
 }
 
-export const makePrototypePropertyGetSet = (proto: any, emid: string, proxy: Record<string, any> = {}, propsMetaMap: Record<string, PropertyMetadata> = {}, opts: { validateOnSet?: boolean } = {}) => {
+/**
+ * Injects setters for whitelisted properties on the given target (typically a function prototype)
+ */
+export const makeValidatingPropertyAccessors = (target: any, emid: string, propsMetaMap: Record<string, PropertyMetadata> = {}, proxy: Record<string, any> = {}) => {
     for (const [propName, propMeta] of Object.entries(propsMetaMap)) {
-        Object.defineProperty(proto, propName, {
+        Object.defineProperty(target, propName, {
             enumerable: true,
             set(value) {
+                const error = standardPropertyValidation(value, propName, propMeta as PropertyMetadata, emid);
+                if (error) throw error;
                 proxy[propName] = value;
-                if (opts.validateOnSet) {
-                    const error = standardPropertyValidation(value, propName, propMeta as PropertyMetadata, emid);
-                    if (error) throw error;
-                }
             },
             get() { return proxy[propName]; },
         });
     }
+    return target;
 }
 
 /**
@@ -173,14 +177,14 @@ export const Model = (metadata: ModelMetadata) => {
 
         const allDecs = getClassDecoratorMap(guid);
         const allProps = (allDecs.properties[EntityDecorators.Property] ?? {}) as Record<string, PropertyMetadata>;
-        const proxy: Record<string, any> = {};
+        const proxy: Record<string, any> = { ...target };
+        delete proxy.prototype;
 
-        makePrototypePropertyGetSet(
+        makeValidatingPropertyAccessors(
             target.prototype, 
             key, 
-            proxy, 
             allProps,
-            { validateOnSet: !meta.notValidateOnSet }
+            proxy
         )
         
         const validatorInstMethod = Object.keys(allDecs.methods?.[EntityDecorators.Validator] ?? {})[0];
@@ -195,12 +199,12 @@ export const Model = (metadata: ModelMetadata) => {
             },
             $assertValidEntity: {
                 writable: false,
-                value: () => {
+                value() {
                     let error: any;
-                    if (validatorInstMethod && proxy[validatorInstMethod]) {
-                        error = proxy[validatorInstMethod]();
-                    } else if (validatorStaticMethod && target[validatorStaticMethod]) {
-                        error = target[validatorStaticMethod](proxy);
+                    if (validatorInstMethod && this[validatorInstMethod]) {
+                        error = this[validatorInstMethod]();
+                    } else if (validatorStaticMethod && this.constructor[validatorStaticMethod]) {
+                        error = this.constructor[validatorStaticMethod](proxy);
                     }
                     error = error ?? standardEntityValidation(key, allProps, proxy);
                     if (error) throw error;

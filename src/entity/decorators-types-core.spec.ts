@@ -1,5 +1,5 @@
 import { resolveTlsa } from "node:dns";
-import { PropertyValidationError, standardPropertyValidation, type EntityValidatorFn, type PropertyMetadata } from "./decorators-types-core";
+import { EntityValidationError, makeValidatingPropertyAccessors, Model, Property, PropertyValidationError, standardPropertyValidation, Validator, type EntityValidatorFn, type PropertyMetadata, type StandardEntity } from "./decorators-types-core";
 import { constants } from "node:buffer";
 
 describe('entity/decorators-types-core', () => {
@@ -90,14 +90,27 @@ describe('entity/decorators-types-core', () => {
         const fixedValues = { 2: 'two', 'b': 'bapple' };
         const fixedValuesScenarios = [
             {
-                title: "fixedValues: succeeds on valid values",
-                multiValues: ['2', 'b', , ['2', 'b']],
+                title: "fixedValues: succeeds on valid single value",
+                multiValues: ['2', 'b'],
                 fixedValues,
             },
             {
-                title: "fixedValues: fails on invalid values",
-                multiValues: [1, ['a']],
+                title: "fixedValues: fails on invalid single value",
+                multiValues: [1, 'a'],
                 fixedValues,
+                errorMessage: "property-fixedValues (see `properties.test-key`)"
+            },
+            {
+                title: "fixedValues: succeeds on valid array value",
+                isArray: true,
+                fixedValues,
+                value: ['2', 'b'],
+            },
+            {
+                title: "fixedValues: fails on invalid array value",
+                isArray: true,
+                fixedValues,
+                value: [1, 'a'],
                 errorMessage: "property-fixedValues (see `properties.test-key`)"
             }
         ];
@@ -131,7 +144,86 @@ describe('entity/decorators-types-core', () => {
 
         })
     });
-    describe.skip('#makePrototypePropertyGetSet', () => {
 
+    describe('#makeValidatingPropertyAccessors', () => {
+        const propsMetaMap: Record<string, Partial<PropertyMetadata>> = {
+            required: {
+                name: 'required',
+                isRequired: true,
+            },
+            array: {
+                name: 'array',
+                isArray: true,
+            }
+        }
+        const mockObject:any = {required: 'y', array: [1]};
+
+        it('successfully injects accessors', () => {
+            const injected = makeValidatingPropertyAccessors({...mockObject}, 'test', propsMetaMap, {...mockObject});
+
+            try {
+                injected.required = undefined
+            } catch (error: any) {
+                expect(error).toBeInstanceOf(PropertyValidationError);
+                expect(error.message).toEqual('property-required (actual: undefined)');
+            }
+            try {
+                injected.array = 'a'
+            } catch (error: any) {
+                expect(error).toBeInstanceOf(PropertyValidationError);
+                expect(error.message).toEqual('property-array (actual: string)');
+            }
+
+            expect(injected.required).toBe('y');
+            expect(injected.array).toEqual([1]);
+
+            injected.required = 'n';
+            injected.array = [2];
+
+            expect(injected.required).toBe('n');
+            expect(injected.array).toEqual([2]);
+        })
+    });
+
+    @Model({
+        name: 'testModel',
+        collection: 'test',
     })
+    class TestModel {
+        @Property({ isRequired: true })
+        name = 'test';
+
+        @Validator()
+        validate() {
+            if (this.name === 'force-error')
+                return new EntityValidationError('force-error detected', 'testModel');
+        }
+    }
+
+    describe('@Model decorator', () => {
+        it('enhances TestModel to conform to StandardEntity', () => {
+            const testModel = new TestModel();
+
+            expect(testModel.$id).toBeUndefined();
+            expect(testModel.$emid).toEqual('test@testModel');
+
+            try {
+                testModel.name = undefined;
+                throw new Error('expected error for undefined');
+            } catch (error: any) {
+                expect(error).toBeInstanceOf(PropertyValidationError);
+                expect(error.message).toEqual('property-required (actual: undefined)');
+            }
+            
+            try {
+                testModel.name = 'force-error';
+                testModel.$assertValidEntity();
+                throw new Error('expected error for invalid entity');
+            } catch (error: any) {
+                // console.log('error', error);
+                expect(error).toBeInstanceOf(EntityValidationError);
+                expect(error.message).toEqual('force-error detected');
+            }
+        });
+    });
 });
