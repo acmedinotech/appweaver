@@ -23,7 +23,7 @@ export interface ModelDefinition extends ModelMetadata {
     properties: Record<string, PropertyMetadata>;
     getEmid: () => string;
     createInstance: () => any;
-    hydrateEntity: <Entity=object>(fromData: Record<string, any>, options?: HydrateOptions) => Entity & StandardEntity;
+    hydrateEntity: <Entity = object>(fromData: Record<string, any>, options?: HydrateOptions) => Entity & StandardEntity;
     dehydrateEntity: (entity: any, options?: DehydrateOptions) => Record<string, any>[];
     removeReadOnly: (data: Record<string, any>) => Record<string, any>;
     /**
@@ -33,7 +33,7 @@ export interface ModelDefinition extends ModelMetadata {
      *   - else: remove all read-only properties
      * - remove additional properties defined in options.removeKeys
      */
-    prepareData: (mode: 'create' | 'update', data: any, options?: { injectData?: Record<string, any>; removeKeys?: string[]}) => {
+    prepareData: (mode: 'create' | 'update', data: any, options?: { injectData?: Record<string, any>; removeKeys?: string[] }) => {
         /** Persistence-ready user data. */
         data: Record<string, any>;
         /** User-supplied key-values that were removed from data. */
@@ -46,7 +46,7 @@ export interface ModelDefinition extends ModelMetadata {
  * @param modelDef If undefined, convention dictates that method contains a default modelDef (or returns undefined)
  * @returns 
  */
-export type EntityValidatorFn = ( modelDef: ModelDefinition, entity?: object) => undefined | AppWeaverError;
+export type EntityValidatorFn = (modelDef: ModelDefinition, entity?: object) => undefined | AppWeaverError;
 
 const collectionToGuids: Record<string, string[]> = {};
 const modelToGuid: Record<string, string> = {};
@@ -58,14 +58,14 @@ export const getModelDefinitionsByCollection = (collection = DEFAULT_COLLECTION)
 
 const _mytype = (v: any) => v === null ? 'null' : typeof v;
 
-const listsHaveDiffs = (list1: any[], list2: any[]) => {
-    return new Set(list1).difference(new Set(list2)).size > 0;
+const getListDifferences = (list1: any[], list2: any[]) => {
+    return new Set(list1).difference(new Set(list2));
 }
 
 /**
  * Applies @Property validation to specifications.
  */
-export const standardPropertyValidation =  (value: any, propertyName: string, propMeta: Partial<PropertyMetadata>, emid: string) => {
+export const standardPropertyValidation = (value: any, propertyName: string, propMeta: Partial<PropertyMetadata>, emid: string) => {
     const { isRequired, isTypeOf, isArray, fixedValues } = propMeta;
     let errors: string[] = [];
     const errProperties: Record<string, string> = {};
@@ -77,35 +77,53 @@ export const standardPropertyValidation =  (value: any, propertyName: string, pr
         errors.push(`property-required (actual: ${_valType})`)
     }
 
-    if (value !== undefined && value !== null) {
-        // case: assert isArray on value
-        if (isArray && !Array.isArray(value)) {
-            errors.push(`property-array (actual: ${_valType})`);
-        } else if (!isArray && Array.isArray(value)) {
-            errors.push(`property-not-array (actual: array; set \`isArray\`)`);
-        } else if (fixedValues) {
-            const vals = value instanceof Array ? value : [value];
-            if (listsHaveDiffs(vals, Object.keys(fixedValues))) {
-                errors.push(`property-fixedValues (see \`properties.${propertyName}\`)`);
-                errProperties[propertyName] = Object.keys(fixedValues).join('; ');
-            }
+    if (!(value !== undefined && value !== null)) {
+        if (errors.length > 0) {
+            return new PropertyValidationError({
+                property: propertyName,
+                message: errors.join('; '),
+                contextName: emid,
+                properties: errProperties
+            });
+        }
+        return undefined;
+    }
+
+    // case: assert isArray on value
+    if (isArray && !Array.isArray(value)) {
+        errors.push(`property-array (actual: ${_valType})`);
+    } else if (!isArray && Array.isArray(value)) {
+        errors.push(`property-not-array (set \`isArray\`)`);
+    } else if (fixedValues) {
+        const vals = value instanceof Array ? value : [value];
+        const diff = getListDifferences(vals.map(v => `${v}`), Object.keys(fixedValues))
+        if (diff.size > 0) {
+            errors.push(`property-fixedValues (not-allowed: ${[...diff].join('; ')})`);
+            errProperties[propertyName] = Object.keys(fixedValues).join('; ');
         }
     }
 
-    const _isTypeOf = typeof isTypeOf === 'string' ? [isTypeOf] : isTypeOf;
-    if (_isTypeOf && _isTypeOf.length > 0 && !_isTypeOf.includes('*')) {
-        let valTypes = [_valType];
-        if (isArray && value.length) {
+    const _isTypeOf = !isTypeOf ? [] : (typeof isTypeOf === 'string' ? [isTypeOf] : isTypeOf);
+    if (_isTypeOf.length > 0 && _isTypeOf[0] !== '*') {
+        let valTypes = [];
+        if (isArray) {
             valTypes = value.map(_mytype);
+        } else {
+            valTypes = [_mytype(value)];
         }
-    
-        if (listsHaveDiffs(valTypes, _isTypeOf)) {
+
+        if (valTypes.length > 0 && getListDifferences(valTypes, _isTypeOf).size > 0) {
             errors.push(`property-typeOf-[${_isTypeOf.join(', ')}] (actual: [${valTypes.join(', ')}])`);
         }
     }
 
     if (errors.length > 0) {
-        return new PropertyValidationError({property: propertyName, message: errors.join('; '), contextName: emid});
+        return new PropertyValidationError({
+            property: propertyName,
+            message: errors.join('; '),
+            contextName: emid,
+            properties: errProperties
+        });
     }
 
     return propMeta.validate?.(value, propertyName);
@@ -161,14 +179,14 @@ export const standardEntityValidation = (emid: string, propsMetaMap: Record<stri
  */
 export const Model = (metadata: ModelMetadata) => {
     return (target: any) => {
-        const meta = {collection: DEFAULT_COLLECTION, ...metadata};
+        const meta = { collection: DEFAULT_COLLECTION, ...metadata };
         registerClassDecorator(EntityDecorators.Model, target, meta);
-        
+
         const key = `${meta.collection}@${meta.name}`;
         if (!collectionToGuids[meta.collection]) {
             collectionToGuids[meta.collection] = [];
         }
-        
+
         const guid = getGuid(target);
         collectionToGuids[meta.collection].push(guid);
         modelToGuid[key] = guid;
@@ -181,12 +199,12 @@ export const Model = (metadata: ModelMetadata) => {
         delete proxy.prototype;
 
         makeValidatingPropertyAccessors(
-            target.prototype, 
-            key, 
+            target.prototype,
+            key,
             allProps,
             proxy
         )
-        
+
         const validatorInstMethod = Object.keys(allDecs.methods?.[EntityDecorators.Validator] ?? {})[0];
         const validatorStaticMethod = Object.keys(allDecs.methodsStatic?.[EntityDecorators.Validator] ?? {})[0];
 
@@ -216,41 +234,7 @@ export const Model = (metadata: ModelMetadata) => {
     };
 };
 
-export class PropertyValidationError extends AppWeaverError {
-    static readonly errorType = 'entity.property.validation-error';
-    propertyName: string;
-    
-    constructor({property, message, contextName = PropertyValidationError.errorType}: {property: string, message: string, contextName?: string}) {
-        super(message, contextName);
-        this.propertyName = property;
-    }
-
-    toJson() {
-        return {
-            ...super.toJson(),
-            propertyName: this.propertyName,
-        }
-    }
-}
-
-export class EntityValidationError extends AppWeaverError {
-    static readonly errorType = 'entity.validation-error';
-    constructor(message: string, contextName: string = EntityValidationError.errorType, properties?: Record<string, any>) {
-        super(message, contextName, properties);
-    }
-
-    toJson() {
-        if (!this.properties) return super.toJson();
-        return {
-            ...super.toJson(),
-            properties: Object.fromEntries(Object.entries(this.properties).map(([key, value]) => {
-                return [key, value.toJson ? value.toJson() : value];
-            })),
-        }
-    }
-}
-
-const _typeof = typeof undefined;
+export type TypeOfs = '*' | 'string' | 'number' | 'boolean' | 'null' | 'bigint' | 'symbol' | 'object' | 'function';
 
 /**
  * Contains a set  of rules for a `@Property` that tooling can use for auto-normalization/validation
@@ -274,7 +258,7 @@ export type PropertyMetadata = {
         maxSelected?: number;
     };
     /** If defined, restricts values to the specified types (`*` allows any type). */
-    isTypeOf?: (typeof _typeof | '*')[];
+    isTypeOf?: TypeOfs[];
     /**
      * If set, property value must exist as a key in the map. Map is `value -> label`.
      * (This could be used with checkboxes, dropdowns, etc.)
@@ -283,8 +267,8 @@ export type PropertyMetadata = {
     /** WIP */
     relationship?: ({
         relType: 'embedded'
-        } | {
-        relType:'child' | 'parent' | 'ref'
+    } | {
+        relType: 'child' | 'parent' | 'ref'
         /** A set of property names to save for foreign/reference relationships. */
         preservedProps: string[];
     }) & {
@@ -313,7 +297,7 @@ export type PropertyMetadata = {
 /**
  * METHOD DECORATOR: Use on an instance or static method. Function must conform to {@see EntityValidatorFn} signature.
  */
-export const Validator  = () => {
+export const Validator = () => {
     return (target: any, propertyKey: string, _: PropertyDescriptor) => {
         registerMethodDecorator(EntityDecorators.Validator, target, propertyKey, {});
     };
@@ -326,9 +310,44 @@ export const Validator  = () => {
  */
 export const Property = (metadata: Partial<PropertyMetadata> = {}) => {
     return (target: any, propertyKey: string) => {
-        registerPropertyDecorator(EntityDecorators.Property, target, propertyKey, {name: propertyKey, ...metadata});
+        registerPropertyDecorator(EntityDecorators.Property, target, propertyKey, { name: propertyKey, ...metadata });
     };
 };
+
+export class PropertyValidationError extends AppWeaverError {
+    static readonly errorType = 'entity.property.validation-error';
+    propertyName: string;
+
+    constructor({ property, message, properties, contextName = PropertyValidationError.errorType }: { property: string, message: string, contextName?: string; properties?: Record<string, any> }) {
+        super(message, contextName);
+        this.propertyName = property;
+        this.properties = properties;
+    }
+
+    toJson() {
+        return {
+            ...super.toJson(),
+            propertyName: this.propertyName,
+        }
+    }
+}
+
+export class EntityValidationError extends AppWeaverError {
+    static readonly errorType = 'entity.validation-error';
+    constructor(message: string, contextName: string = EntityValidationError.errorType, properties?: Record<string, any>) {
+        super(message, contextName, properties);
+    }
+
+    toJson() {
+        if (!this.properties) return super.toJson();
+        return {
+            ...super.toJson(),
+            properties: Object.fromEntries(Object.entries(this.properties).map(([key, value]) => {
+                return [key, value.toJson ? value.toJson() : value];
+            })),
+        }
+    }
+}
 
 export type IdExtractorFn = (entity: any, keys: string[], propMeta: PropertyMetadata, modelDef?: ModelDefinition) => Record<string, any>;
 
@@ -343,7 +362,7 @@ export type DehydrateOptions = {
 }
 
 export interface StandardEntity {
-    $id: () => string|undefined;
+    $id: () => string | undefined;
     $emid: () => string;
     $assertValidEntity: () => void;
 }
@@ -354,7 +373,7 @@ export interface ObservableEntity {
      * @param onProperties If undefined or `*`, observe all properties. Otherwise, observe explicit key(s).
      * @returns Unsubscribe function.
      */
-    $observeWith: (observer: PropertyObserverFn, onProperties?: string|string[]) => () => void;
+    $observeWith: (observer: PropertyObserverFn, onProperties?: string | string[]) => () => void;
 }
 
 export type PropertyObserverFn = (property: string, value: any) => void;

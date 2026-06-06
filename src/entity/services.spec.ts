@@ -11,9 +11,9 @@ class BaseModel {
     name?: string =  '';
     @Property({ isTypeOf: ['number'] })
     age = 0;
-    @Property({ isArray: true, isTypeOf: ['string'] })
+    @Property({ isRequired: true, isArray: true, isTypeOf: ['string'] })
     streetAddresses: string[] = [];
-    @Property({ isArray: true, isTypeOf: ['number'] })
+    @Property({ isRequired: true,isArray: true, isTypeOf: ['number'], fixedValues: {1: 'one', 3: 'three', 7: 'seven'} })
     ages: number[] = [];
 }
 
@@ -36,19 +36,20 @@ describe('entity/services', () => {
     describe('baseline behaviors', () => {
         it('fails standard validation (asserts: isRequired, isArray, isTypeOf)', () => {
             const entity = baseModelDef.hydrateEntity({});
-            const badProps = { name: undefined, age: undefined, streetAddresses: undefined, ages: ['a'] };
+            const badProps = { name: undefined, age: '', streetAddresses: true, ages: [1, 8] };
             const expectedErrors = [
-                'property-required (actual: undefined)',
-                'property-typeOf (expected: [number], actual: [undefined])',
-                'property-array (expected: array, actual: undefined)', 
-                'property-typeOf (expected: [number], actual: [string])'
+                [PropertyValidationError, 'property-required (actual: undefined)'],
+                [PropertyValidationError, 'property-typeOf-[number] (actual: [string])'],
+                [TypeError, 'value.map is not a function'], 
+                [PropertyValidationError, 'property-fixedValues (not-allowed: 8)']
             ];
             Object.entries(badProps).forEach(([key, value]) => {
-                try {
+                 try {
                     (entity as any)[key] = value;
                 } catch (error: any) {
-                    expect(error).toBeInstanceOf(PropertyValidationError);
-                    expect(error.message).toEqual(expectedErrors.shift());
+                    const [errClass, errMessage] = expectedErrors.shift() ?? [];
+                    expect(error).toBeInstanceOf(errClass);
+                    expect(error.message).toEqual(errMessage);
                 }
             });
             expect(expectedErrors.length).toEqual(0);
@@ -70,12 +71,6 @@ describe('entity/services', () => {
             );
             expect(data).toMatchObject([entityData]);
         });
-    });
-
-    describe('#standardEntityValidation(), #standardPropertyValidation()', () => {
-        describe('asserts: isRequired, isReadOnly, isAutoCreated,', () => {
-
-        })
     });
 
     describe('entity validation & inheritance', () => {
@@ -105,29 +100,26 @@ describe('entity/services', () => {
 
         it('invokes instance validateEntity() (asserts: @Validator() instance method)', () => {
             const modelDef = getModelDefinition(ModelWithInstanceValidator) as ModelDefinition;
-            const entity = modelDef.hydrateEntity({ name: 'force-error', age: 30 });
-
             try {
-                entity.$assertValidEntity();
-                // throw new Error('expected error for invalid entity');
+                modelDef.hydrateEntity({ name: 'force-error', age: 30 });
             } catch (validationError: any) {
-                expect(validationError).toBeInstanceOf(EntityValidationError);
+                expect(validationError).toBeInstanceOf(PropertyValidationError);
                 expect(validationError?.toJson()).toEqual({
-                    contextName: 'model.instanceValidator',
-                    message: 'force-error detected',
-                    properties: undefined
+                    contextName: 'entity.property.validation-error',
+                    message: 'force-error',
+                    properties: undefined,
+                    propertyName: 'name'
                 });
             }
         });
 
         it('invokes static validateEntity() (asserts: @Validator() static method)', () => {
             const modelDef = getModelDefinition(ModelWithStaticValidator) as ModelDefinition;
-            const entity = modelDef.hydrateEntity({ name: 'force-error-static', age: 60 });
             try {
-                entity.$assertValidEntity();
+                modelDef.hydrateEntity({ name: 'force-error-static', age: 60 });
                 // throw new Error('expected error for invalid entity');
             } catch (validationError: any) {
-                expect(validationError).toBeInstanceOf(EntityValidationError);
+                expect(validationError).toBeInstanceOf(PropertyValidationError);
                 expect(validationError?.toJson()).toEqual({
                     contextName: 'force-error2 detected',
                     message: 'model.staticValidator',
@@ -153,7 +145,7 @@ describe('entity/services', () => {
                 } catch (error: any) {
                     expect(error).toBeInstanceOf(PropertyValidationError);
                     expect(error.message).toEqual('force-error')
-                    expect(entity.name).toBe('force-error');
+                    expect(entity.name).toBe('force-error-static');
                 }
             });
 

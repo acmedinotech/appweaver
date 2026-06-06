@@ -62,21 +62,21 @@ describe('entity/decorators-types-core', () => {
             },
             {
                 title: "isTypeOf: fails when boolean",
-                multiValues: [undefined],
                 isTypeOf: "boolean",
-                errorMessage: "property-typeOf-[boolean] (actual: [undefined])"
+                value: 1,
+                errorMessage: "property-typeOf-[boolean] (actual: [number])"
             },
             {
                 title: "isTypeOf: fails when [boolean]",
-                multiValues: [undefined],
                 isTypeOf: ["boolean"],
-                errorMessage: "property-typeOf-[boolean] (actual: [undefined])"
+                value: "b",
+                errorMessage: "property-typeOf-[boolean] (actual: [string])"
             },
             {
                 title: "isTypeOf: succeeds when [number,string]",
-                value: [1, "a", 1.1],
                 isArray: true,
-                isTypeOf: ['number', 'string']
+                isTypeOf: ['number', 'string'],
+                value: [1, "a", 1.1],
             },
             {
                 title: "isTypeOf: fails when [number,string]",
@@ -96,9 +96,10 @@ describe('entity/decorators-types-core', () => {
             },
             {
                 title: "fixedValues: fails on invalid single value",
-                multiValues: [1, 'a'],
+                isArray: true,
                 fixedValues,
-                errorMessage: "property-fixedValues (see `properties.test-key`)"
+                value: ['b', 3],
+                errorMessage: "property-fixedValues (not-allowed: 3)"
             },
             {
                 title: "fixedValues: succeeds on valid array value",
@@ -111,7 +112,7 @@ describe('entity/decorators-types-core', () => {
                 isArray: true,
                 fixedValues,
                 value: [1, 'a'],
-                errorMessage: "property-fixedValues (see `properties.test-key`)"
+                errorMessage: "property-fixedValues (not-allowed: 1; a)"
             }
         ];
         const validate = (v: any) => {
@@ -132,6 +133,7 @@ describe('entity/decorators-types-core', () => {
 
         it.each([...isRequiredScenarios, ...isArrayScenarios, ...isTypeOfScenarios, ...fixedValuesScenarios, ...customValidateScenarios])
             ("$title", ({value, multiValues, errorMessage, ...rest}) => {
+                console.log(rest.title, ' >>>>')
                 const doAssert = (value: any) => {
                     const error = standardPropertyValidation(value, "test-key", rest as PropertyMetadata, "noemid");
                     expect(error?.message).toBe(errorMessage);              
