@@ -1,2 +1,4 @@
-export * from './decorators-types-core';
-export * from './services';
+export * from './types';
+export * from './core';
+export * from './decorators';
+export * from './services'

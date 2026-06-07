@@ -4,7 +4,7 @@ import * as smartContainer from "../smart-container";
 import { PersistInterfaces, type EntityCollectionManagerInterface, type GetManyResults } from "./decorators";
 import { getModelDefinition } from "../entity/services";
 import { HttpError } from "../http/services";
-import { EntityValidationError } from "../entity/decorators-types-core";
+import { EntityValidationError } from "../entity";
 import { AppWeaverError } from "../constants";
 
 @Controller({ rootPath: '/_dangerous_override', isSubApp: true })

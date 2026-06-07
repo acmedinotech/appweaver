@@ -4,7 +4,7 @@ import { smartContainer } from "../../library";
 import type { EntityCollectionManagerInterface, GetManyResults } from "../../persist/decorators";
 import { CollectionManagerLCRUDController as CollectionManagerAPIController } from "../../persist/services";
 import { getMongodbConfigFromEnvVars, makeMongodbClientWrapper, type MongodbWrapper } from "./mongo";
-import { getModelDefinitionGuid, Model, Property, type HydrateOptions, type ModelDefinition } from "../../entity/decorators-types-core";
+import { getModelDefinitionGuid, Model, Property, type HydrateOptions, type ModelDefinition } from "../../entity";
 import { getModelDefinitionByGuid } from "../../entity/services";
 
 import * as bundleExpressServer from './express';

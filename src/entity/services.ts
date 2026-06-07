@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getClassForGuid, getGuid, getInheritedClassDecoratorMap, type ClassDecoratorMap } from "../decorator-registry";
-import { EntityDecorators, getModelGuidByEmid, PropertyValidationError, type DehydrateOptions, type EntityValidatorFn, type IdExtractorFn, type ModelDefinition, type ObservableEntity, type PropertyMetadata, type PropertyObserverFn, type StandardEntity, standardPropertyValidation } from "./decorators-types-core";
+import { EntityDecorators, getModelGuidByEmid, PropertyValidationError, type DehydrateOptions, type EntityValidatorFn, type IdExtractorFn, type ModelDefinition, type ObservableEntity, type PropertyMetadata, type PropertyObserverFn, type StandardEntity, standardPropertyValidation } from ".";
 
 export const passthruDecode = (value: any) => value;
 export const passthruEncode = (value: any) => value;

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { EntityValidationError, Model, Property, PropertyValidationError, Validator, type ModelDefinition, type StandardEntity } from "./decorators-types-core";
+import { EntityValidationError, Model, Property, PropertyValidationError, Validator, type ModelDefinition, type StandardEntity } from ".";
 import { getModelDefinition, makeObservableEntity, prepareDataForMutation } from "./services";
 
 @Model({
