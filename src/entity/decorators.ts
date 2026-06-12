@@ -1,5 +1,5 @@
 import { getClassDecoratorMap, getGuid, registerClassDecorator, registerMethodDecorator, registerPropertyDecorator } from "../decorator-registry";
-import { makeValidatingPropertyAccessors, standardEntityValidation } from "./core";
+import { makeStandardEntityAccessors, makeValidatingPropertyAccessors } from "./core";
 import { DEFAULT_COLLECTION, EntityDecorators, type ModelMetadata, type PropertyMetadata } from "./types";
 
 const collectionToGuids: Record<string, string[]> = {};
@@ -10,7 +10,7 @@ export const getModelGuidByEmid = (emid: string) => modelToGuid[emid];
 export const getModelDefinitionsByCollection = (collection = DEFAULT_COLLECTION) => collectionToGuids[collection] ?? [];
 
 /**
- * CLASS DECORATOR: Defines an entity @Model.
+ * CLASS DECORATOR: Defines an entity @Model and injects StandardEntity into class prototype.
  * @param metadata 
  * @returns 
  */
@@ -19,55 +19,28 @@ export const Model = (metadata: ModelMetadata) => {
         const meta = { collection: DEFAULT_COLLECTION, ...metadata };
         registerClassDecorator(EntityDecorators.Model, target, meta);
 
-        const key = `${meta.collection}@${meta.name}`;
+        const emid = `${meta.collection}@${meta.name}`;
         if (!collectionToGuids[meta.collection]) {
             collectionToGuids[meta.collection] = [];
         }
 
         const guid = getGuid(target);
         collectionToGuids[meta.collection].push(guid);
-        modelToGuid[key] = guid;
-
-        const idKey = meta.idKey ?? 'id';
+        modelToGuid[emid] = guid;
 
         const allDecs = getClassDecoratorMap(guid);
-        const allProps = (allDecs.properties[EntityDecorators.Property] ?? {}) as Record<string, PropertyMetadata>;
         const proxy: Record<string, any> = { ...target };
         delete proxy.prototype;
 
-        makeValidatingPropertyAccessors(
-            target.prototype,
-            key,
-            allProps,
-            proxy
-        )
+        const errorState: Record<string, any> = {};
 
-        const validatorInstMethod = Object.keys(allDecs.methods?.[EntityDecorators.Validator] ?? {})[0];
-        const validatorStaticMethod = Object.keys(allDecs.methodsStatic?.[EntityDecorators.Validator] ?? {})[0];
-
-        Object.defineProperties(target.prototype, {
-            $id: {
-                get() { return (proxy as any)[idKey]; }
-            },
-            $emid: {
-                get() { return key; }
-            },
-            $assertValidEntity: {
-                writable: false,
-                value() {
-                    let error: any;
-                    if (validatorInstMethod && this[validatorInstMethod]) {
-                        error = this[validatorInstMethod]();
-                    } else if (validatorStaticMethod && this.constructor[validatorStaticMethod]) {
-                        error = this.constructor[validatorStaticMethod](proxy);
-                    }
-                    error = error ?? standardEntityValidation(key, allProps, proxy);
-                    if (error) throw error;
-                }
-            },
-        });
-
-        return target;
+        return class extends target {
+            constructor(...args: any[]) {
+                super(...args);
+                makeStandardEntityAccessors(this, emid, allDecs, proxy);
+                makeValidatingPropertyAccessors({target: this, emid, propsMetaMap: (allDecs.properties[EntityDecorators.Property] ?? {}) as Record<string, PropertyMetadata>, proxy, errorState});
+            }
+        };
     };
 };
 

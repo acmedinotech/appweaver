@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { EntityValidationError, Model, Property, PropertyValidationError, Validator, type ModelDefinition, type StandardEntity } from ".";
-import { getModelDefinition, makeObservableEntity, prepareDataForMutation } from "./services";
+import { getModelDefinition, makeObservableEntity, prepareData } from "./lifecycle";
 
 @Model({
     collection: 'testCollection',
@@ -230,14 +230,14 @@ describe('entity/services', () => {
         describe('#prepareDataForMutation()', () => {
             it('returns expected properties on-create (asserts: isAutoCreated, autoCreatedValue)', () => {
                 const modelDef = getModelDefinition(ChildThing) as ModelDefinition;
-                const {data} = prepareDataForMutation(modelDef, 'create', { name: 'Test1' });
+                const {data} = prepareData(modelDef, 'create', { name: 'Test1' });
                 expect(data.name).toBe('Test1');
                 expect(data._id).toMatch(new RegExp(`^${ChildThing.emid}:`));
             });
 
             it('returns expected properties on-update (asserts: isReadOnly, isAutoCreated, isAutoUpdated, autoUpdatedValue)', () => {
                 const modelDef = getModelDefinition(ChildThing) as ModelDefinition;
-                const {data} = prepareDataForMutation(modelDef, 'update', 
+                const {data} = prepareData(modelDef, 'update', 
                     { _id: 'x', name: 'Test2', updatedAt: '2026-02-16' }
                 );
                 expect(data.name).toBe('Test2');

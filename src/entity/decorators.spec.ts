@@ -19,7 +19,7 @@ describe('entity/decorators', () => {
 
     describe('@Model decorator', () => {
         it('enhances TestModel to conform to StandardEntity', () => {
-            const testModel = asStandardEntity(new TestModel());
+            const testModel = asStandardEntity(new TestModel()) as TestModel;
 
             expect(testModel.$id).toBeUndefined();
             expect(testModel.$emid).toEqual('test@testModel');

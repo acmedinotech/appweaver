@@ -2,7 +2,7 @@ import type { Request } from "express";
 import { Controller, Middleware, Route } from "../http/decorators";
 import * as smartContainer from "../smart-container";
 import { PersistInterfaces, type EntityCollectionManagerInterface, type GetManyResults } from "./decorators";
-import { getModelDefinition } from "../entity/services";
+import { getModelDefinition } from "../entity/lifecycle";
 import { HttpError } from "../http/services";
 import { EntityValidationError } from "../entity";
 import { AppWeaverError } from "../constants";

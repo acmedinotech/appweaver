@@ -5,7 +5,7 @@ import type { EntityCollectionManagerInterface, GetManyResults } from "../../per
 import { CollectionManagerLCRUDController as CollectionManagerAPIController } from "../../persist/services";
 import { getMongodbConfigFromEnvVars, makeMongodbClientWrapper, type MongodbWrapper } from "./mongo";
 import { getModelDefinitionGuid, Model, Property, type HydrateOptions, type ModelDefinition } from "../../entity";
-import { getModelDefinitionByGuid } from "../../entity/services";
+import { getModelDefinitionByGuid } from "../../entity/lifecycle";
 
 import * as bundleExpressServer from './express';
 import express, { type NextFunction } from 'express';
