@@ -91,12 +91,12 @@ export interface EntityLifecycleManager {
     }
     hydrateEntity: <Entity = object>(args: {
         data: Record<string, any>;
-        entity?: any;
+        entity?: Entity;
         options?: DehydrateOptions
     }) => Entity & StandardEntity;
     dehydrateEntity: (args: {
         entity: any;
-        data: Record<string, any>;
+        data?: Record<string, any>;
     }) => Record<string, any>[];
 }
 

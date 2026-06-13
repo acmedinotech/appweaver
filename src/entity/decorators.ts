@@ -1,4 +1,4 @@
-import { getClassDecoratorMap, getGuid, registerClassDecorator, registerMethodDecorator, registerPropertyDecorator } from "../decorator-registry";
+import { getClassDecoratorMap, getGuid, registerClassDecorator, registerMethodDecorator, registerPropertyDecorator, type ClassConstructor } from "../decorator-registry";
 import { makeStandardEntityAccessors, makeValidatingPropertyAccessors } from "./core";
 import { DEFAULT_COLLECTION, EntityDecorators, type ModelMetadata, type PropertyMetadata } from "./types";
 
@@ -15,9 +15,9 @@ export const getModelDefinitionsByCollection = (collection = DEFAULT_COLLECTION)
  * @returns 
  */
 export const Model = (metadata: ModelMetadata) => {
-    return (target: any) => {
+    return <T extends ClassConstructor>(target: T) => {
         const meta = { collection: DEFAULT_COLLECTION, ...metadata };
-        registerClassDecorator(EntityDecorators.Model, target, meta);
+        const { clazz, setEffectiveClass } = registerClassDecorator(EntityDecorators.Model, target, meta);
 
         const emid = `${meta.collection}@${meta.name}`;
         if (!collectionToGuids[meta.collection]) {
@@ -29,18 +29,14 @@ export const Model = (metadata: ModelMetadata) => {
         modelToGuid[emid] = guid;
 
         const allDecs = getClassDecoratorMap(guid);
-        const proxy: Record<string, any> = { ...target };
+        const proxy: Record<string, any> = { ...(target as any) };
         delete proxy.prototype;
 
         const errorState: Record<string, any> = {};
 
-        return class extends target {
-            constructor(...args: any[]) {
-                super(...args);
-                makeStandardEntityAccessors(this, emid, allDecs, proxy);
-                makeValidatingPropertyAccessors({target: this, emid, propsMetaMap: (allDecs.properties[EntityDecorators.Property] ?? {}) as Record<string, PropertyMetadata>, proxy, errorState});
-            }
-        };
+        const newClass = makeStandardEntityAccessors(target, emid, allDecs);
+        setEffectiveClass(newClass);
+        return newClass as T;
     };
 };
 

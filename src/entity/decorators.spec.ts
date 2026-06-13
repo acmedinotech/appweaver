@@ -5,10 +5,11 @@ describe('entity/decorators', () => {
     @Model({
         name: 'testModel',
         collection: 'test',
+        idKey: '_id',
     })
     class TestModel {
         @Property({ isRequired: true })
-        name = 'test';
+        name?: string = 'test';
 
         @Validator()
         validate() {
@@ -19,17 +20,17 @@ describe('entity/decorators', () => {
 
     describe('@Model decorator', () => {
         it('enhances TestModel to conform to StandardEntity', () => {
-            const testModel = asStandardEntity(new TestModel()) as TestModel;
+            const testModel = asStandardEntity<InstanceType<typeof TestModel>>(new TestModel());
 
-            expect(testModel.$id).toBeUndefined();
-            expect(testModel.$emid).toEqual('test@testModel');
+            expect(testModel.$id).toBe('_id');
+            expect(testModel.$emid).toBe('test@testModel');
 
             try {
                 testModel.name = undefined;
                 throw new Error('expected error for undefined');
             } catch (error: any) {
                 expect(error).toBeInstanceOf(PropertyValidationError);
-                expect(error.message).toEqual('property-required (actual: undefined)');
+                expect(error.message).toBe('property-required (actual: undefined)');
             }
             
             try {
@@ -39,7 +40,7 @@ describe('entity/decorators', () => {
             } catch (error: any) {
                 // console.log('error', error);
                 expect(error).toBeInstanceOf(EntityValidationError);
-                expect(error.message).toEqual('force-error detected');
+                expect(error.message).toBe('force-error detected');
             }
         });
     });

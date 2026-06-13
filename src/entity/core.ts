@@ -1,9 +1,7 @@
-import { getClassForGuid, type ClassDecoratorMap } from "../decorator-registry";
+import { getClassForGuid, getGuid, type ClassConstructor, type ClassDecoratorMap } from "../decorator-registry";
 import { EntityDecorators, EntityValidationError, getTypeOf, PropertyValidationError, type ModelDefinition, type ModelMetadata, type PropertyMetadata } from "./types";
 
 const getListDifferences = (list1: any[], list2: any[]) => {
-    console.log(list1, ' //// ', list2)
-    console.log(1, new Set(list1).difference, 2, new Set(list2).difference)
     return new Set(list1).difference(new Set(list2));
 }
 
@@ -76,24 +74,26 @@ export const standardPropertyValidation = (value: any, propertyName: string, pro
 /**
  * Injects setters for whitelisted properties on the given target (typically a function prototype)
  */
-export const makeValidatingPropertyAccessors = (args: {target: any, emid: string, propsMetaMap: Record<string, PropertyMetadata>, proxy: Record<string, any>; errorState: Record<string, any> }) => {
-    const { target, emid, propsMetaMap, proxy, errorState } = args;
+export const makeValidatingPropertyAccessors = (args: {target: any, emid: string, propsMetaMap: Record<string, PropertyMetadata>}) => {
+    const { target, emid, propsMetaMap } = args;
     for (const [propName, propMeta] of Object.entries(propsMetaMap)) {
-        console.log('> propName', propName, propMeta);
+        if (Object.hasOwn(target, propName)) {
+            delete target[propName];
+        }
+        // !Object.hasOwn(target, propName) &&
         Object.defineProperty(target, propName, {
             enumerable: true,
             set(value) {
-                console.log('> set', propName, value);
-                proxy[propName] = value;
+                this.$__proxy[propName] = value;
                 const error = standardPropertyValidation(value, propName, propMeta as PropertyMetadata, emid);
                 if (error) {
-                    errorState[propName] = error.toJson();
+                    this.$__errorState[propName] = error.toJson();
                     throw error;
                 } else {
-                    delete errorState[propName];
+                    delete this.$__errorState[propName];
                 }
             },
-            get() { return proxy[propName]; },
+            get() { return this.$__proxy[propName]; },
         });
     }
     return target;
@@ -124,40 +124,87 @@ export const standardEntityValidation = (emid: string, propsMetaMap: Record<stri
     return new EntityValidationError('entity-validation-failed: see properties', emid, errors)
 }
 
-export const makeStandardEntityAccessors = (target: any, emid: string, allDecs: ClassDecoratorMap, proxy: Record<string, any> = {}) => {
+
+type ProxyEntity = {
+    $__proxy: Record<string, any>;
+    $__errorState: Record<string, any>;
+}
+
+const assertValidEntity = (entity: ProxyEntity, emid: string, allDecs: ClassDecoratorMap) => {
+    if (Object.keys(entity.$__errorState).length > 0) {
+        throw new EntityValidationError(
+            'entity-validation-failed: see properties',
+            emid,
+            entity.$__errorState
+        );
+    }
+
     const validatorInstMethod = Object.keys(allDecs.methods?.[EntityDecorators.Validator] ?? {})[0];
     const validatorStaticMethod = Object.keys(allDecs.methodsStatic?.[EntityDecorators.Validator] ?? {})[0];
+    const anyentity = entity as any;
+    let error: any;
+    if (validatorInstMethod && anyentity[validatorInstMethod]) {
+        error = anyentity[validatorInstMethod]();
+    } else if (validatorStaticMethod && anyentity.constructor[validatorStaticMethod]) {
+        error = anyentity.constructor[validatorStaticMethod](entity);
+    }
+    error = error ?? 
+    
+    standardEntityValidation(
+        emid, 
+        (allDecs.properties[EntityDecorators.Property] ?? {}) as Record<string, PropertyMetadata>,
+        entity
+    );
+    
+    if (error) throw error;
+}
 
+export const makeStandardEntityAccessors = (constructorFn: ClassConstructor<any>, emid: string, allDecs: ClassDecoratorMap) => {
     const meta = allDecs.class[EntityDecorators.Model];
     const idKey = meta.idKey ?? 'id';
-    const errorState: Record<string, any> = {};
 
-    Object.defineProperties(target, {
-        $id: {
-            get() { return (proxy as any)[idKey]; }
-        },
-        $emid: {
-            get() { return emid; }
-        },
-        $assertValidEntity: {
-            writable: false,
-            value() {
-                if (Object.keys(errorState).length > 0) {
-                    throw new EntityValidationError('entity-validation-failed: see properties', emid, errorState);
-                }
+    const newClass = class extends constructorFn {
+        $__proxy: Record<string, any> = {};
+        $__errorState: Record<string, any> = {};
 
-                let error: any;
-                if (validatorInstMethod && this[validatorInstMethod]) {
-                    error = this[validatorInstMethod]();
-                } else if (validatorStaticMethod && this.constructor[validatorStaticMethod]) {
-                    error = this.constructor[validatorStaticMethod](proxy);
-                }
-                error = error ?? standardEntityValidation(emid, (allDecs.properties[EntityDecorators.Property] ?? {}) as Record<string, PropertyMetadata>, proxy);
-                
-                if (error) throw error;
-            }
-        },
-    });
+        constructor(...args: any[]) {
+            super(...args);
+            hideInternalProperties(this);
+            makeValidatingPropertyAccessors({
+                target: this,
+                emid,
+                propsMetaMap: (allDecs.properties[EntityDecorators.Property] ?? {}) as Record<string, PropertyMetadata>,
+            })
+        }
+
+        get $id() {
+            return idKey;
+        }
+
+        get $emid() {
+            return emid;
+        }
+
+        $assertValidEntity() {
+            assertValidEntity(this, emid, allDecs);
+        }
+    };
+
+    return newClass;
+}
+
+const INTERNAL_PROPERTIES = ['$__proxy', '$__errorState'];
+
+export const hideInternalProperties = (target: any) => {
+    for (const prop of INTERNAL_PROPERTIES) {
+        if (!Object.hasOwn(target, prop)) {
+            Object.defineProperty(target, prop, {
+                enumerable: false,
+                writable: true,
+                configurable: false,
+            });
+        }
+    }
 }
 
 /**

@@ -3,7 +3,7 @@ export const KEY_PARENT_GUID = '__PARENT_GUID__';
 export const KEY_PREFIX = "GUID_";
 const EMPTY_GUID = '_';
 
-export type ClassConstructor = any;
+export type ClassConstructor<T> = new (...a: any[])=> T;
 export type Metadata = Record<string, any>;
 export type ClassGetter = () => any
 export type ClassDecoratorRecord = [string, Metadata, ClassGetter];
@@ -116,6 +116,7 @@ export const getGuidInheritanceChain = (clazz: any) => {
 const _decoratorToClassses: Record<string, ClassDecoratorRecord[]> = {}
 export const registerClassDecorator = (decorator: string, clazz: any, metadata: any) => {
     const guid = setAndGetGuid(clazz);
+
     if (!_decoratorToClassses[decorator]) {
         _decoratorToClassses[decorator] = [];
     }
@@ -124,7 +125,13 @@ export const registerClassDecorator = (decorator: string, clazz: any, metadata: 
     }]);
     _classToDecorators[guid].push([decorator, () => _guidToClass[guid], metadata]);
     _classToDecoratedObject[guid].class[decorator] = metadata;
-    return clazz;
+    
+    return {
+        clazz,
+        setEffectiveClass: (clazz: any) => {
+            _guidToClass[guid] = clazz;
+        }
+    };
 }
 
 export const getClassesForDecorator = (decorator: string) => _decoratorToClassses[decorator] ?? []

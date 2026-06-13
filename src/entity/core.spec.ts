@@ -1,6 +1,4 @@
-import { resolveTlsa } from "node:dns";
-import { EntityValidationError, makeValidatingPropertyAccessors, Model, Property, PropertyValidationError, standardPropertyValidation, Validator, type EntityValidatorFn, type PropertyMetadata, type StandardEntity } from ".";
-import { constants } from "node:buffer";
+import { makeValidatingPropertyAccessors, PropertyValidationError, standardPropertyValidation, type PropertyMetadata } from ".";
 
 describe('entity/core', () => {
     describe('#standardPropertyValidation', () => {
@@ -131,7 +129,13 @@ describe('entity/core', () => {
             },
         ];
 
-        it.each([...isRequiredScenarios, ...isArrayScenarios, ...isTypeOfScenarios, ...fixedValuesScenarios, ...customValidateScenarios])
+        it.each([
+            ...isRequiredScenarios, 
+            ...isArrayScenarios, 
+            ...isTypeOfScenarios, 
+            ...fixedValuesScenarios, 
+            ...customValidateScenarios
+        ])
             ("$title", ({value, multiValues, errorMessage, ...rest}) => {
                 console.log(rest.title, ' >>>>')
                 const doAssert = (value: any) => {
@@ -160,8 +164,12 @@ describe('entity/core', () => {
         }
         const mockObject:any = {required: 'y', array: [1]};
 
-        it('successfully injects accessors', () => {
-            const injected = makeValidatingPropertyAccessors({...mockObject}, 'test', propsMetaMap as Record<string, PropertyMetadata>, {...mockObject});
+        it('successfully injects throw-after-set accessors', () => {
+            const injected = makeValidatingPropertyAccessors({
+                target: {...mockObject, $__proxy: {}, $__errorState: {}}, 
+                emid: 'test', 
+                propsMetaMap: propsMetaMap as Record<string, PropertyMetadata>,
+            });
 
             try {
                 injected.required = undefined
@@ -176,8 +184,8 @@ describe('entity/core', () => {
                 expect(error.message).toEqual('property-array (actual: string)');
             }
 
-            expect(injected.required).toBe('y');
-            expect(injected.array).toEqual([1]);
+            expect(injected.required).toBe(undefined);
+            expect(injected.array).toEqual('a');
 
             injected.required = 'n';
             injected.array = [2];

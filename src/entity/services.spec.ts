@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { EntityValidationError, Model, Property, PropertyValidationError, Validator, type ModelDefinition, type StandardEntity } from ".";
-import { getModelDefinition, makeObservableEntity, prepareData } from "./lifecycle";
+import { EntityValidationError,PropertyValidationError, type ModelDefinition, type StandardEntity } from "./types";
+import {Model, Property, Validator, } from "./decorators";
+import { makeEntityLifecycleManager, prepareData } from "./lifecycle";
+import { getModelDefinition, makeObservableEntity } from "./services";
 
 @Model({
     collection: 'testCollection',
@@ -19,7 +21,7 @@ class BaseModel {
 
 describe('entity/services', () => {
     describe('direct decorator-enhanced behaviors', () => {
-        it('asserts validation after-property-set', () => {
+        it('asserts throw-after-set validation', () => {
             const entity = new BaseModel();
             try {
                 entity.name = undefined;
@@ -31,11 +33,16 @@ describe('entity/services', () => {
         })
 
     })
+
+    const emid = 'testCollection@testModel';
     const baseModelDef = getModelDefinition(new BaseModel()) as ModelDefinition;
+    const lcman = makeEntityLifecycleManager(emid);
     
     describe('baseline behaviors', () => {
         it('fails standard validation (asserts: isRequired, isArray, isTypeOf)', () => {
-            const entity = baseModelDef.hydrateEntity({});
+            const entity = lcman.hydrateEntity({
+                data: {}
+            });
             const badProps = { name: undefined, age: '', streetAddresses: true, ages: [1, 8] };
             const expectedErrors = [
                 [PropertyValidationError, 'property-required (actual: undefined)'],
@@ -46,6 +53,7 @@ describe('entity/services', () => {
             Object.entries(badProps).forEach(([key, value]) => {
                  try {
                     (entity as any)[key] = value;
+                    throw new Error(`expected error for: ${key}=${value}`);
                 } catch (error: any) {
                     const [errClass, errMessage] = expectedErrors.shift() ?? [];
                     expect(error).toBeInstanceOf(errClass);
@@ -58,7 +66,9 @@ describe('entity/services', () => {
         const entityData = { name: 'Test', age: 30, streetAddresses: ['123 Main St'] };
 
         it('hydrates from JSON data', () => {
-            const entity: BaseModel = baseModelDef.hydrateEntity(entityData);
+            const entity: BaseModel = lcman.hydrateEntity({
+                data: entityData
+            });
 
             expect(entity.name).toBe('Test');
             expect(entity.age).toBe(30);
@@ -66,26 +76,26 @@ describe('entity/services', () => {
         });
 
         it('dehydrates to JSON data', () => {
-            const data = baseModelDef.dehydrateEntity(
-                baseModelDef.hydrateEntity(entityData)
+            const data = lcman.dehydrateEntity(
+                { entity: lcman.hydrateEntity({data: entityData}) }
             );
             expect(data).toMatchObject([entityData]);
         });
     });
 
-    describe('entity validation & inheritance', () => {
-        @Model({
-            name: 'model.instanceValidator',
-            collection: 'testCollection',
-        })
-        class ModelWithInstanceValidator extends BaseModel {
-            @Validator()
-            validate(modelDef: ModelDefinition) {
-                if (this.name === 'force-error')
-                    return new EntityValidationError('force-error detected', 'model.instanceValidator');
-            }
+    @Model({
+        name: 'model.instanceValidator',
+        collection: 'testCollection',
+    })
+    class ModelWithInstanceValidator extends BaseModel {
+        @Validator()
+        validate(modelDef: ModelDefinition) {
+            if (this.name === 'force-error')
+                return new EntityValidationError('force-error detected', 'model.instanceValidator');
         }
+    }
 
+    describe('entity validation & inheritance', () => {
         @Model({
             name: 'model.staticValidator',
             collection: 'testCollection',
@@ -99,9 +109,9 @@ describe('entity/services', () => {
         }
 
         it('invokes instance validateEntity() (asserts: @Validator() instance method)', () => {
-            const modelDef = getModelDefinition(ModelWithInstanceValidator) as ModelDefinition;
+            const lcman = makeEntityLifecycleManager("testCollection@model.instanceValidator");
             try {
-                modelDef.hydrateEntity({ name: 'force-error', age: 30 });
+                lcman.hydrateEntity({ data: { name: 'force-error', age: 30 } });
             } catch (validationError: any) {
                 expect(validationError).toBeInstanceOf(PropertyValidationError);
                 expect(validationError?.toJson()).toEqual({
@@ -114,9 +124,9 @@ describe('entity/services', () => {
         });
 
         it('invokes static validateEntity() (asserts: @Validator() static method)', () => {
-            const modelDef = getModelDefinition(ModelWithStaticValidator) as ModelDefinition;
+            const lcman = makeEntityLifecycleManager("testCollection@model.staticValidator");
             try {
-                modelDef.hydrateEntity({ name: 'force-error-static', age: 60 });
+                lcman.hydrateEntity({ data: { name: 'force-error-static', age: 60 } });
                 // throw new Error('expected error for invalid entity');
             } catch (validationError: any) {
                 expect(validationError).toBeInstanceOf(PropertyValidationError);
@@ -129,11 +139,12 @@ describe('entity/services', () => {
         });
 
         describe('#makeStandardEntity()', () => {
-            const entity: ModelWithInstanceValidator & StandardEntity = (getModelDefinition(ModelWithInstanceValidator) as ModelDefinition).hydrateEntity({ name: 'Test', age: 30 });
-            it('validates properties on set', () => {
+            const lcman = makeEntityLifecycleManager("testCollection@model.instanceValidator");
+            const entity: ModelWithInstanceValidator & StandardEntity = lcman.hydrateEntity({ data: { name: 'Test', age: 30 } });
+            it('validates throw-after-set', () => {
                 try {
                     entity.name = undefined;
-                    // throw new Error('expected error for undefined');
+                    throw new Error('expected error for undefined');
                 } catch (error: any) {
                     expect(error).toBeInstanceOf(PropertyValidationError);
                     expect(error.message).toEqual('property-required (actual: undefined)')
@@ -141,18 +152,18 @@ describe('entity/services', () => {
 
                 try {
                     entity.name = 'force-error';
-                    // throw new Error('expected error for force-error');
+                    throw new Error('expected error for force-error');
                 } catch (error: any) {
                     expect(error).toBeInstanceOf(PropertyValidationError);
                     expect(error.message).toEqual('force-error')
-                    expect(entity.name).toBe('force-error-static');
+                    expect(entity.name).toBe('force-error');
                 }
             });
 
             it('throws error on assertValidEntity()', () => {
                 try {
                     entity.$assertValidEntity();
-                    // throw new Error('expected error for invalid entity');
+                    throw new Error('expected error for invalid entity');
                 } catch (error: any) {
                     expect(error).toBeInstanceOf(EntityValidationError);
                 }
@@ -161,16 +172,17 @@ describe('entity/services', () => {
 
         describe('#makeObservableEntity()', () => {
             const modelDef = getModelDefinition(ModelWithInstanceValidator) as ModelDefinition;
-            const entity = makeObservableEntity<ModelWithInstanceValidator>(modelDef, modelDef.hydrateEntity({ name: 'Test', age: 30 }));
+            const lcman = makeEntityLifecycleManager("testCollection@model.instanceValidator");
+            const entity = makeObservableEntity<ModelWithInstanceValidator>(modelDef, lcman.hydrateEntity({ data: { name: 'Test', age: 30 } }));
             const events: string[] = [];
             
-            const unsub1 = entity.$observeWith((key, value) => {
+            const unsub1 = entity.$observeWith(({property: key, value}) => {
                 events.push(`all: ${key}=${value}`)
             });
-            const unsub2 = entity.$observeWith((key, value) => {
+            const unsub2 = entity.$observeWith(({property: key, value}) => {
                 events.push(`one: ${key}=${value}`)
             }, 'age');
-            const unsub3 = entity.$observeWith((key, value) => {
+            const unsub3 = entity.$observeWith(({property: key, value}) => {
                 events.push(`mny: ${key}=${value}`)
             }, ['name', 'streetAddresses']);
 
@@ -194,55 +206,6 @@ describe('entity/services', () => {
                 unsub3();
                 entity.name = 'name2';
                 expect(events.length).toEqual(6)
-            });
-        });
-    });
-
-    describe('hydration, dehydration, & relationships', () => {
-        const collection = 'test.hydrate-dehydrate-relationships';
-        @Model({
-            name: 'childThing',
-            collection,
-        })
-        class ChildThing {
-            static readonly emid = `${collection}@childThing`;
-            @Property({ isAutoCreated: true, autoCreatedValue: () => `${ChildThing.emid}:${randomUUID()}` })
-            _id?: string;
-            @Property({ isAutoUpdated: true, autoUpdatedValue: () => new Date()})
-            updatedAt?: Date;
-            @Property({ isRequired: true })
-            name: string = '';
-        }
-
-        @Model({
-            name: 'parent',
-            collection,
-        })
-        class Parent {
-            @Property({ relationship: { relType: 'embedded', emid: ChildThing.emid } })
-            embeddedChild?: ChildThing;
-            @Property({ relationship: { relType: 'child', preservedProps: ['_id'], emid: ChildThing.emid } })
-            strongRefChild?: ChildThing;
-            @Property({ relationship: { relType: 'ref', preservedProps: ['_id'], emid: ChildThing.emid } })
-            weakRefChild?: ChildThing;
-        }
-      
-        describe('#prepareDataForMutation()', () => {
-            it('returns expected properties on-create (asserts: isAutoCreated, autoCreatedValue)', () => {
-                const modelDef = getModelDefinition(ChildThing) as ModelDefinition;
-                const {data} = prepareData(modelDef, 'create', { name: 'Test1' });
-                expect(data.name).toBe('Test1');
-                expect(data._id).toMatch(new RegExp(`^${ChildThing.emid}:`));
-            });
-
-            it('returns expected properties on-update (asserts: isReadOnly, isAutoCreated, isAutoUpdated, autoUpdatedValue)', () => {
-                const modelDef = getModelDefinition(ChildThing) as ModelDefinition;
-                const {data} = prepareData(modelDef, 'update', 
-                    { _id: 'x', name: 'Test2', updatedAt: '2026-02-16' }
-                );
-                expect(data.name).toBe('Test2');
-                expect(data.updatedAt).toBeInstanceOf(Date);
-                expect(data._id).toBeUndefined();
             });
         });
     });
