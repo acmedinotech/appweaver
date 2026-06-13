@@ -40,6 +40,11 @@ algorithm:
         - get relModelDef by rel.emid
         - if relModelDef
             - data[key] = map hydrate(preparedData[key])
+            - if options.queueEntityFetch
+                - options.queueEntityFetch({ entity: data[key], parent: entity, key, ord? })
+- @ queueEntityFetch: sends caller a partially hydrated entity (and its position within parent)
+    - caller can now fetch all referenced entities and inject missing properties
+    
 
 ## Dehydration
 

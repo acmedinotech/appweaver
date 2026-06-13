@@ -63,35 +63,63 @@ export const prepareData = ({ mode, userData, appData: injectData = {} }: Parame
     return result;
 }
 
-// export const standardPropertyValidation = (value: any, propertyName: string, modelDef: ModelDefinition) => 
-//     quickPropertyValidation(value, propertyName, modelDef.properties[propertyName], modelDef.getEmid());
-
-const __uuid_keys: Record<string, boolean> = { _id: true, id: true };
-
 export const PROP_REL_ENCODING = '_rel_encType';
 export const PROP_REL_EMID = '_rel_emid';
 export const UUID_DEFAULT_PREFIX = '*';
 export const VALUE_UNDEFINED_PREFIX = '*undefined:';
+
+export const hydrateEntity = ({ entity: _entity, data, options = {} }: Parameters<EntityLifecycleManager['hydrateEntity']>[0], modelDef?: ModelDefinition) => {
+    if (!modelDef) return undefined;
+    const entity = _entity ?? (modelDef.createInstance());
+
+    Object.entries(modelDef.properties).forEach(([propName, propDef]) => {
+        if (data[propName] === undefined) return;
+
+        const value = data[propName];
+        if (propDef.relationship) {
+            const { relType, emid: emidDefault } = propDef.relationship;
+            if (value instanceof Array) {
+                entity[propName] = value.map((subent) => 
+                    hydrateEntity(
+                        {data: subent, options},
+                        getModelDefinitionByEmid(subent[PROP_REL_EMID] ?? emidDefault)
+                    ) ?? subent
+                ).forEach((subent, idx) => {
+                    options.queueEntityFetch?.({entity: subent, parent: entity, key: propName, ord: idx});
+                });
+
+            } else {
+                entity[propName] = hydrateEntity(
+                    {data: value, options},
+                    getModelDefinitionByEmid(value[PROP_REL_EMID])
+                ) ?? value;
+                options.queueEntityFetch?.({entity: entity[propName], parent: entity, key: propName});
+            }
+        } else {
+            entity[propName] = propDef.decode(value, propName, modelDef);
+        }
+    })
+
+    return entity;
+}
 
 const defaultIdExtractor: IdExtractorFn = (entity, keys) => {
     const extractedKeys: Record<string, any> = {};
     for (const key of keys) {
         if (entity[key] !== undefined)
             extractedKeys[key] = entity[key];
-        else if (__uuid_keys[key])
-            extractedKeys[key] = `${UUID_DEFAULT_PREFIX}${randomUUID()}`
         else
             extractedKeys[key] = `${VALUE_UNDEFINED_PREFIX}${key}`;
     }
     return extractedKeys;
 }
 
-export const dehydrateProperty = (value: any, propDef: PropertyMetadata, entity: any, { idExtractor = defaultIdExtractor }: DehydrateOptions = {}) => {
+export const dehydrateProperty = (value: any, propDef: PropertyMetadata, _entity: any, { idExtractor = defaultIdExtractor }: DehydrateOptions = {}) => {
     let normValue = value;
-    if (propDef.relationship) {
+    if (propDef.relationship && propDef.relationship) {
         const { emid: emidDefault, relType, emidConstraints: modelConstraints } = propDef.relationship;
         if (relType === 'embedded')
-            return normValue;
+            return normValue; // @todo dehydrate embedded
 
         const {preservedProps: keys} = propDef.relationship;
         // @todo handle isArray
@@ -106,7 +134,6 @@ export const dehydrateProperty = (value: any, propDef: PropertyMetadata, entity:
 
         normValue = {
             ...extractedKeys,
-            [PROP_REL_ENCODING]: relType,
             [PROP_REL_EMID]: emid,
             // @todo _rel_parent_id
         };
@@ -139,7 +166,7 @@ export const dehydrateEntity= ({entity}: Parameters<EntityLifecycleManager['dehy
         for (const [propName, propDef] of Object.entries(modelDef.properties)) {
             const value = dehydrateProperty(ent[propName], propDef, ent, options);
             doc[propName] = value;
-            if (propDef.relationship?.relType === 'child') {
+            if (propDef.relationship?.relType === 'child' && value) {
                 recurseDehydrate(
                     value,
                     getModelDefinitionByEmid(value[PROP_REL_EMID]),
@@ -151,38 +178,6 @@ export const dehydrateEntity= ({entity}: Parameters<EntityLifecycleManager['dehy
 
     recurseDehydrate(entity, modelDef);
     return docs;
-}
-
-export const hydrateEntity = ({ entity: _entity, data }: Parameters<EntityLifecycleManager['hydrateEntity']>[0], modelDef?: ModelDefinition) => {
-    if (!modelDef) return undefined;
-    const entity = _entity ?? (modelDef.createInstance());
-
-    Object.entries(modelDef.properties).forEach(([propName, propDef]) => {
-        if (data[propName] === undefined) return;
-
-        const value = data[propName];
-        if (propDef.relationship) {
-            const { relType, emid: emidDefault } = propDef.relationship;
-            if (value instanceof Array) {
-                entity[propName] = value.map(subent => hydrateEntity({
-                    data: subent,
-                }, getModelDefinitionByEmid(subent[PROP_REL_EMID] ?? emidDefault)) ?? subent);
-            } else {
-                entity[propName] = hydrateEntity({
-                    data: value,
-                }, getModelDefinitionByEmid(value[PROP_REL_EMID])) ?? value;
-            }
-            
-            if (relType !== 'embedded') {
-                // @todo fetch deep entities
-                console.warn(`🟠 hydrateEntityWithRelations: data fetching not-supported: ${relType}`, { relType }, value);
-            }
-        } else {
-            entity[propName] = propDef.decode(value, propName, modelDef);
-        }
-    })
-
-    return entity;
 }
 
 export const makeEntityLifecycleManager = (emid: string): EntityLifecycleManager => {

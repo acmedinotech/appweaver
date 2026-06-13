@@ -92,7 +92,7 @@ export interface EntityLifecycleManager {
     hydrateEntity: <Entity = object>(args: {
         data: Record<string, any>;
         entity?: Entity;
-        options?: DehydrateOptions
+        options?: HydrateOptions
     }) => Entity & StandardEntity;
     dehydrateEntity: (args: {
         entity: any;
@@ -137,11 +137,6 @@ export type PropMutationMetadata = {
      * Context-dependent value transformation. E.g. a form handler might convert a complex object to a JSON string.
      */
     encode: (value: any, property: string, modelDef: ModelDefinition) => any;
-    /**
-     * Property validation. If undefined, the property is assumed to be valid. Otherwise, passes return value to caller.
-     */
-    validate: (value: any, property: string) => undefined | PropertyValidationError;
-
 };
 
 export type PropValidationMetadata = {
@@ -174,6 +169,15 @@ export type PropValidationMetadata = {
          * */
         emidConstraints?: string[]
     }
+    /**
+     * Property validation. If undefined, the property is assumed to be valid. Otherwise, passes return value to caller.
+     */
+    validate: (value: any, property: string) => undefined | PropertyValidationError;
+    /**
+     * If defined, allows function to modify set value before it's stored on entity. Use cases include
+     * enforcing a minimally valid value (e.g. array must always have 1 item).
+     */
+    setMap?: (value: any, property: string) => any;
 };
 
 /**
@@ -189,6 +193,8 @@ export type IdExtractorFn = (entity: any, keys: string[], propMeta: PropertyMeta
 export type HydrateOptions = {
     /** If true, no enhancements (e.g. injecting StandardEntity methods) are applied to the entity. */
     isSparse?: boolean;
+    /** If true, the entity will be hydrated incrementally. */
+    queueEntityFetch?: (params: { entity: any, parent: any, key: string, ord?: number }) => void;
 }
 
 export type DehydrateOptions = {
