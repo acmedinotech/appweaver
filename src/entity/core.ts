@@ -74,7 +74,7 @@ export const standardPropertyValidation = (value: any, propertyName: string, pro
 /**
  * Injects setters for whitelisted properties on the given target (typically a function prototype)
  */
-export const makeValidatingPropertyAccessors = (args: {target: any, emid: string, propsMetaMap: Record<string, PropertyMetadata>}) => {
+export const makeValidatingPropertyAccessors = (args: { target: any, emid: string, propsMetaMap: Record<string, PropertyMetadata> }) => {
     const { target, emid, propsMetaMap } = args;
     for (const [propName, propMeta] of Object.entries(propsMetaMap)) {
         if (Object.hasOwn(target, propName)) {
@@ -130,7 +130,7 @@ type ProxyEntity = {
     $__errorState: Record<string, any>;
 }
 
-const assertValidEntity = (entity: ProxyEntity, emid: string, allDecs: ClassDecoratorMap) => {
+export const assertValidEntity = (entity: ProxyEntity, emid: string, allDecs: ClassDecoratorMap) => {
     if (Object.keys(entity.$__errorState).length > 0) {
         throw new EntityValidationError(
             'entity-validation-failed: see properties',
@@ -143,19 +143,18 @@ const assertValidEntity = (entity: ProxyEntity, emid: string, allDecs: ClassDeco
     const validatorStaticMethod = Object.keys(allDecs.methodsStatic?.[EntityDecorators.Validator] ?? {})[0];
     const anyentity = entity as any;
     let error: any;
-    if (validatorInstMethod && anyentity[validatorInstMethod]) {
+    if (validatorInstMethod) {
+        console.log('invoking instance validator', validatorInstMethod, ' >>>>', anyentity);
         error = anyentity[validatorInstMethod]();
-    } else if (validatorStaticMethod && anyentity.constructor[validatorStaticMethod]) {
+    } else if (validatorStaticMethod) {
         error = anyentity.constructor[validatorStaticMethod](entity);
     }
-    error = error ?? 
-    
-    standardEntityValidation(
-        emid, 
+    error = error ?? standardEntityValidation(
+        emid,
         (allDecs.properties[EntityDecorators.Property] ?? {}) as Record<string, PropertyMetadata>,
         entity
     );
-    
+
     if (error) throw error;
 }
 
@@ -169,7 +168,6 @@ export const makeStandardEntityAccessors = (constructorFn: ClassConstructor<any>
 
         constructor(...args: any[]) {
             super(...args);
-            hideInternalProperties(this);
             makeValidatingPropertyAccessors({
                 target: this,
                 emid,
@@ -193,20 +191,6 @@ export const makeStandardEntityAccessors = (constructorFn: ClassConstructor<any>
     return newClass;
 }
 
-const INTERNAL_PROPERTIES = ['$__proxy', '$__errorState'];
-
-export const hideInternalProperties = (target: any) => {
-    for (const prop of INTERNAL_PROPERTIES) {
-        if (!Object.hasOwn(target, prop)) {
-            Object.defineProperty(target, prop, {
-                enumerable: false,
-                writable: true,
-                configurable: false,
-            });
-        }
-    }
-}
-
 /**
  * Creates a ModelDefinition instance from a ClassDecoratorMap. The modelDef operates on
  * concrete objects and does not bind in any way to the instance/class definition.
@@ -218,12 +202,12 @@ export const makeModelDefinition = (allDecs: ClassDecoratorMap): ModelDefinition
     const guid = allDecs.guid;
 
     const properties = Object.entries(propsForDecorator).reduce((acc, [property, metadata]) => {
-        const { decode = (v:any) => v, encode = (v:any) => v, validate: validateFn = () => undefined, ...rest } = metadata;
+        const { decode = (v: any) => v, encode = (v: any) => v, validate: validateFn = () => undefined, ...rest } = metadata;
         acc[property] = {
             name: metadata.name ?? property,
             decode,
             encode,
-            validate: (value: any, propDefName) => 
+            validate: (value: any, propDefName) =>
                 standardPropertyValidation(value, propDefName, metadata as PropertyMetadata, emid),
             ...rest
         };

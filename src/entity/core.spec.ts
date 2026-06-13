@@ -1,4 +1,6 @@
-import { makeValidatingPropertyAccessors, PropertyValidationError, standardPropertyValidation, type PropertyMetadata } from ".";
+import type { ClassDecoratorMap } from "../decorator-registry";
+import { assertValidEntity, makeModelDefinition, makeStandardEntityAccessors, makeValidatingPropertyAccessors, standardEntityValidation, standardPropertyValidation } from "./core";
+import { EntityDecorators, EntityValidationError, PropertyValidationError, type PropertyMetadata } from "./types";
 
 describe('entity/core', () => {
     describe('#standardPropertyValidation', () => {
@@ -7,13 +9,13 @@ describe('entity/core', () => {
                 title: "isRequired: fails on value=null",
                 isRequired: true,
                 value: null,
-                errorMessage:'property-required (actual: null)'
+                errorMessage: 'property-required (actual: null)'
             },
             {
                 title: "isRequired: fails on value=undefined",
                 isRequired: true,
                 value: undefined,
-                errorMessage:'property-required (actual: undefined)'
+                errorMessage: 'property-required (actual: undefined)'
             },
             {
                 title: "isRequired: succeeds on value=null",
@@ -32,6 +34,12 @@ describe('entity/core', () => {
                 isArray: true,
                 value: 'a',
                 errorMessage: 'property-array (actual: string)'
+            },
+            {
+                title: "isArray(false): fails on value=array",
+                isArray: false,
+                value: [],
+                errorMessage: 'property-not-array (set `isArray`)'
             }
         ] as any[];
 
@@ -114,7 +122,7 @@ describe('entity/core', () => {
             }
         ];
         const validate = (v: any) => {
-            if (v === 'do-error') return new PropertyValidationError({property: 'test', message: 'do-error triggered'})
+            if (v === 'do-error') return new PropertyValidationError({ property: 'test', message: 'do-error triggered' })
         }
         const customValidateScenarios = [
             {
@@ -130,17 +138,16 @@ describe('entity/core', () => {
         ];
 
         it.each([
-            ...isRequiredScenarios, 
-            ...isArrayScenarios, 
-            ...isTypeOfScenarios, 
-            ...fixedValuesScenarios, 
+            ...isRequiredScenarios,
+            ...isArrayScenarios,
+            ...isTypeOfScenarios,
+            ...fixedValuesScenarios,
             ...customValidateScenarios
         ])
-            ("$title", ({value, multiValues, errorMessage, ...rest}) => {
-                console.log(rest.title, ' >>>>')
+            ("$title", ({ value, multiValues, errorMessage, ...rest }) => {
                 const doAssert = (value: any) => {
                     const error = standardPropertyValidation(value, "test-key", rest as PropertyMetadata, "noemid");
-                    expect(error?.message).toBe(errorMessage);              
+                    expect(error?.message).toBe(errorMessage);
                 }
                 if (multiValues) {
                     multiValues.forEach(doAssert)
@@ -148,26 +155,49 @@ describe('entity/core', () => {
                     doAssert(value)
                 }
 
-        })
+            })
     });
 
-    describe('#makeValidatingPropertyAccessors', () => {
-        const propsMetaMap: Record<string, Partial<PropertyMetadata>> = {
-            required: {
-                name: 'required',
-                isRequired: true,
-            },
-            array: {
-                name: 'array',
-                isArray: true,
-            }
+    const propsMetaMap = {
+        required: {
+            name: 'required',
+            isRequired: true,
+        },
+        array: {
+            name: 'array',
+            isArray: true,
         }
-        const mockObject:any = {required: 'y', array: [1]};
+    } as unknown as Record<string, PropertyMetadata>;
+    const allDecsInst = {
+        methods: {
+            [EntityDecorators.Validator]: {
+                'instValidate': {}
+            }
+        },
+        properties: {
+            [EntityDecorators.Property]: propsMetaMap
+        }
+    } as unknown as ClassDecoratorMap;
+    const allDecsStat = {
+        methodsStatic: {
+            [EntityDecorators.Validator]: {
+                'statValidate': () => {
+                    return new EntityValidationError('statValidate failed');
+                }
+            }
+        },
+        properties: {
+            [EntityDecorators.Property]: propsMetaMap
+        }
+    } as unknown as ClassDecoratorMap;
+
+    describe('#makeValidatingPropertyAccessors', () => {
+        const mockObject: any = { required: 'y', array: [1] };
 
         it('successfully injects throw-after-set accessors', () => {
             const injected = makeValidatingPropertyAccessors({
-                target: {...mockObject, $__proxy: {}, $__errorState: {}}, 
-                emid: 'test', 
+                target: { ...mockObject, $__proxy: {}, $__errorState: {} },
+                emid: 'test',
                 propsMetaMap: propsMetaMap as Record<string, PropertyMetadata>,
             });
 
@@ -193,5 +223,88 @@ describe('entity/core', () => {
             expect(injected.required).toBe('n');
             expect(injected.array).toEqual([2]);
         })
+    });
+
+    describe('#standardEntityValidation', () => {
+        const emid = 'standard.entity.validation';
+        it('throws on undefined entity', () => {
+            expect(() => standardEntityValidation(emid, propsMetaMap, undefined)).toThrow(Error);
+        })
+        it('returns undefined on valid entity', () => {
+            const entity = { required: 'y', array: [1] };
+            expect(standardEntityValidation(emid, propsMetaMap, entity)).toBeUndefined();
+        })
+        it('returns EntityValidationError on invalid entity', () => {
+            const entity = { required: undefined, array: [1] };
+            expect(standardEntityValidation(emid, propsMetaMap, entity)).toBeInstanceOf(EntityValidationError);
+        })
+    });
+
+    describe('#assertValidEntity', () => {
+        const emid = 'assert.valid.entity';
+        const entity = {
+            required: 'y', array: [1], $__errorState: {}, $__proxy: {},
+            instValidate: () => {
+                return new EntityValidationError('instValidate failed');
+            },
+            constructor: {
+                statValidate: () => {
+                    return new EntityValidationError('statValidate failed');
+                }
+            }
+        } as any;
+
+        it('throws on non-empty $__errorState', () => {
+            expect(() => assertValidEntity({ ...entity, $__errorState: { required: 'n' } }, emid, allDecsInst)).toThrow(EntityValidationError);
+        })
+        it('invokes instance validator if present', () => {
+            const e = { ...entity, $__proxy: { required: 'n' } };
+            expect(() => assertValidEntity(e, emid, allDecsInst)).toThrow("instValidate failed");
+        });
+        it('invokes static validator if present', () => {
+            const e = { ...entity, $__proxy: { required: 'n' } };
+            expect(() => assertValidEntity(e, emid, allDecsStat)).toThrow("statValidate failed");
+        });
+        it('throws TypeError if no validator is present', () => {
+            const e = { ...entity, $__proxy: { required: 'n' } };
+            delete e.instValidate;
+            expect(() => assertValidEntity(e, emid, allDecsInst)).toThrow(TypeError);
+        });
+    });
+
+    describe('#makeStandardEntityAccessors', () => {
+        class LocalClass { };
+        const allDecs = {...allDecsInst, class: {
+            [EntityDecorators.Model]: {
+                idKey: '__id',
+            }
+        }}
+        const NewClass = makeStandardEntityAccessors(LocalClass, 'test', allDecs);
+        it('extends original class to make Entity & ProxyEntity & StandardEntity', () => {
+            const inst = new NewClass();
+            expect(inst.$id).toBe('__id');
+            expect(inst.$emid).toBe('test');
+            expect(inst.$__proxy).toEqual({});
+            expect(inst.$__errorState).toEqual({});
+            expect(() => inst.$assertValidEntity()).toThrow("anyentity[validatorInstMethod] is not a function");
+        });
+    });
+
+    describe('#makeModelDefinition', () => {
+        it('creates a ModelDefinition instance from a ClassDecoratorMap', () => {
+            const allDecs = {...allDecsInst, class: {
+                [EntityDecorators.Model]: {
+                    name: 'mmd',
+                    collection: 'c',
+                    idKey: '__id',
+                }
+            }}
+            const modelDef = makeModelDefinition(allDecs);
+            expect(modelDef.modelMetadata.idKey).toBe('__id');
+            expect(modelDef.properties.required.name).toBe('required');
+            expect(modelDef.properties.required.isRequired).toBe(true);
+            expect(modelDef.getEmid()).toBe('c@mmd');
+            expect(typeof modelDef.createInstance).toBe('function');
+        });
     });
 });

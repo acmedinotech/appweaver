@@ -1,5 +1,5 @@
 import { getClassDecoratorMap, getGuid, registerClassDecorator, registerMethodDecorator, registerPropertyDecorator, type ClassConstructor } from "../decorator-registry";
-import { makeStandardEntityAccessors, makeValidatingPropertyAccessors } from "./core";
+import { makeStandardEntityAccessors } from "./core";
 import { DEFAULT_COLLECTION, EntityDecorators, type ModelMetadata, type PropertyMetadata } from "./types";
 
 const collectionToGuids: Record<string, string[]> = {};
@@ -15,7 +15,7 @@ export const getModelDefinitionsByCollection = (collection = DEFAULT_COLLECTION)
  * @returns 
  */
 export const Model = (metadata: ModelMetadata) => {
-    return <T extends ClassConstructor>(target: T) => {
+    return <T extends ClassConstructor<any>>(target: T) => {
         const meta = { collection: DEFAULT_COLLECTION, ...metadata };
         const { clazz, setEffectiveClass } = registerClassDecorator(EntityDecorators.Model, target, meta);
 
