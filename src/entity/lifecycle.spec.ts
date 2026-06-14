@@ -130,7 +130,7 @@ describe('entity/lifecycle', () => {
     class NewChild extends Child {
     }
 
-    describe.only('#dehydrateEntity()', () => {
+    describe('#dehydrateEntity()', () => {
         const entity = lc.hydrateEntity<Root>({ data });
         
         entity.embeddedChild = new NewChild();
