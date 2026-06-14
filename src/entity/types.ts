@@ -97,6 +97,7 @@ export interface EntityLifecycleManager {
     dehydrateEntity: (args: {
         entity: any;
         data?: Record<string, any>;
+        options?: DehydrateOptions;
     }) => Record<string, any>[];
 }
 
@@ -107,6 +108,10 @@ export interface StandardEntity {
 }
 
 export const asStandardEntity = <Ent extends object>(entity: any) => entity as Ent & StandardEntity;
+
+export const isStandardEntity = (entity: any): entity is StandardEntity => {
+    return entity && typeof entity.$id === 'string' && typeof entity.$emid === 'string' && typeof entity.$assertValidEntity === 'function';
+}
 
 /**
  * @param entity If undefined, convention dictates that `this` is the entity
@@ -200,6 +205,7 @@ export type HydrateOptions = {
 export type DehydrateOptions = {
     idExtractor?: IdExtractorFn;
     depth?: number;
+    preserveKeys?: string[];
 }
 
 export interface ObservableEntity {

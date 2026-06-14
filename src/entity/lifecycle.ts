@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getModelDefinitionByEmid } from "./services";
-import { type DehydrateOptions, type EntityLifecycleManager, type IdExtractorFn, type ModelDefinition, type PropertyMetadata } from "./types";
+import { isStandardEntity, type DehydrateOptions, type EntityLifecycleManager, type IdExtractorFn, type ModelDefinition, type PropertyMetadata } from "./types";
 
 export const passthruDecode = (value: any) => value;
 export const passthruEncode = (value: any) => value;
@@ -116,7 +116,7 @@ const defaultIdExtractor: IdExtractorFn = (entity, keys) => {
 
 export const dehydrateProperty = (value: any, propDef: PropertyMetadata, _entity: any, { idExtractor = defaultIdExtractor }: DehydrateOptions = {}) => {
     let normValue = value;
-    if (propDef.relationship && propDef.relationship) {
+    if (propDef.relationship) {
         const { emid: emidDefault, relType, emidConstraints: modelConstraints } = propDef.relationship;
         if (relType === 'embedded')
             return normValue; // @todo dehydrate embedded
@@ -142,7 +142,15 @@ export const dehydrateProperty = (value: any, propDef: PropertyMetadata, _entity
     return normValue;
 }
 
-export class Dehydrator { }
+export const extractEmid = (entity: any) => entity.$emid ?? entity[PROP_REL_EMID];
+
+export const extractPreservedKeys = (entity: any, keys: string[]) => {
+    const nv: Record<string, any> = {};
+    for (const key of keys) {
+        nv[key] = entity[key] ?? null;
+    }
+    return nv;
+}
 
 /**
  * Produces 1+ documents containing:
@@ -150,34 +158,45 @@ export class Dehydrator { }
  * - the root entity being dehydrated
  * - any property defined as `relationship=child` (recurse)
  */
-export const dehydrateEntity= ({entity}: Parameters<EntityLifecycleManager['dehydrateEntity']>[0], modelDef?: ModelDefinition, options?: DehydrateOptions) => {
-    const docs: Record<string, any>[] = [];
+export const dehydrateEntity= ({entity, options}: Parameters<EntityLifecycleManager['dehydrateEntity']>[0], modelDef?: ModelDefinition): any[] => {
+    if (!modelDef) { return [];}
+    
+    const { preserveKeys } = options ?? {};
+    const emid = extractEmid(entity);
+    const doc: Record<string, any> = { [PROP_REL_EMID]: emid };
+    const docs: any[] = [];
 
-    const { depth: maxDepth = -1 } = (options ?? {});
+    for (const [propName, propDef] of Object.entries(modelDef.properties)) {
+        const { relationship, isArray } = propDef;
+        const value = entity[propName];
+        if (relationship) {
+            if (!value) continue;
+            // @todo worry about entities that couldn't be dehydrated?
+            const relEmid = relationship.emid;
+            const relOptions = { ...options };
+            const preserveKeys = relationship?.relType !== 'embedded' ? [...relationship.preservedProps, PROP_REL_EMID] : undefined;
 
-    const recurseDehydrate = (ent: any, modelDef?: ModelDefinition, { depth = 0 }: DehydrateOptions = {}) => {
-        if (!modelDef || (maxDepth >= 0 && depth >= maxDepth))
-            return;
-
-        const { id, _id, [PROP_REL_EMID]: emid, ...rest } = ent;
-        const doc: Record<string, any> = { id, _id, [PROP_REL_EMID]: emid };
-        docs.push(doc);
-
-        for (const [propName, propDef] of Object.entries(modelDef.properties)) {
-            const value = dehydrateProperty(ent[propName], propDef, ent, options);
-            doc[propName] = value;
-            if (propDef.relationship?.relType === 'child' && value) {
-                recurseDehydrate(
-                    value,
-                    getModelDefinitionByEmid(value[PROP_REL_EMID]),
-                    { depth: depth + 1 }
-                );
+            const encodeRelationship = (subent: any) => {
+                const relModelDef = getModelDefinitionByEmid(extractEmid(subent) ?? relEmid);
+                const newDocs = dehydrateEntity({entity: subent, options: relOptions}, relModelDef);
+                docs.push(...newDocs);
+                if (newDocs[0]) {
+                    return preserveKeys ? extractPreservedKeys(newDocs[0], preserveKeys) : newDocs[0];
+                } else {
+                    return null;
+                }
             }
+
+            if (isArray) {
+                doc[propName] = value.map(encodeRelationship);
+            } else {
+                doc[propName] = encodeRelationship(value);
+            }
+        } else {
+            doc[propName] = propDef.encode(value, propName, modelDef);
         }
     }
-
-    recurseDehydrate(entity, modelDef);
-    return docs;
+    return [preserveKeys ? extractPreservedKeys(doc, preserveKeys) : doc, ...docs];
 }
 
 export const makeEntityLifecycleManager = (emid: string): EntityLifecycleManager => {

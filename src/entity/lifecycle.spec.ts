@@ -25,7 +25,7 @@ class Root {
     @Property({ isReadOnly: true })
     readOnly = 'readonly';
 
-    @Property({ relationship: { relType: 'child', preservedProps: ['id'], emid: childEmid } })
+    @Property({ relationship: { relType: 'child', preservedProps: ['id'] } })
     refChild?: Child;
 
     @Property({ relationship: { relType: 'embedded', emid: childEmid } })
@@ -68,29 +68,29 @@ describe('entity/lifecycle', () => {
         });
     });
 
-    describe('#hydrateEntity()', () => {
-        const data = {
-            title: 'hydrated.root',
-            createdAt: new Date('2026-01-01'),
-            updatedAt: new Date('2026-01-02'),
-            readOnly: 'hydrated.readonly',
-            refChild: {
-                title: 'hydrated.child',
-                id: 'child-ref',
-                [PROP_REL_EMID]: childEmid,
-                child: {
-                    title: 'iii',
-                    id: 'child-iii',
-                    [PROP_REL_EMID]: childEmid,
-                }
-            },
-            embeddedChild: {
-                title: 'hydrated.embedded.child',
-                id: 'embedded-child',
+    const data = {
+        title: 'hydrated.root',
+        createdAt: new Date('2026-01-01'),
+        updatedAt: new Date('2026-01-02'),
+        readOnly: 'hydrated.readonly',
+        refChild: {
+            title: 'hydrated.child',
+            id: 'child-ref',
+            [PROP_REL_EMID]: childEmid,
+            child: {
+                title: 'iii',
+                id: 'child-iii',
                 [PROP_REL_EMID]: childEmid,
             }
-        };
+        },
+        embeddedChild: {
+            title: 'hydrated.embedded.child',
+            id: 'embedded-child',
+            [PROP_REL_EMID]: childEmid,
+        }
+    };
 
+    describe('#hydrateEntity()', () => {
         const queue: any[] = [];
         const entity = lc.hydrateEntity<Root>({
             data, options: {
@@ -126,9 +126,44 @@ describe('entity/lifecycle', () => {
         });
     });
 
-    describe.skip('#dehydrateEntity()', () => {
-        const entity = new Root();
-        (entity as any).keepme = 'kept';
-        const docs = lc.dehydrateEntity({ entity });
+    @Model({ collection, name: 'newChild' })
+    class NewChild extends Child {
+    }
+
+    describe.only('#dehydrateEntity()', () => {
+        const entity = lc.hydrateEntity<Root>({ data });
+        
+        entity.embeddedChild = new NewChild();
+        entity.embeddedChild.title = 'newChild';
+        entity.embeddedChild.id = 'newChild-id';
+      
+        const skeleton = lc.dehydrateEntity({ entity });
+        expect(skeleton).toEqual([
+            {
+              _rel_emid: 'lifecycle@root',
+              title: 'hydrated.root',
+              createdAt: new Date('2026-01-01T00:00:00.000Z'),
+              updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+              readOnly: 'hydrated.readonly',
+              refChild: { id: 'child-ref', _rel_emid: 'lifecycle@child' },
+              embeddedChild: {
+                _rel_emid: 'lifecycle@newChild',
+                id: 'newChild-id',
+                title: 'newChild'
+              }
+            },
+            {
+              _rel_emid: 'lifecycle@child',
+              id: 'child-ref',
+              title: 'hydrated.child',
+              child: { id: 'child-iii', _rel_emid: 'lifecycle@child' }
+            },
+            { _rel_emid: 'lifecycle@child', id: 'child-iii', title: 'iii' },
+            {
+              _rel_emid: 'lifecycle@newChild',
+              id: 'newChild-id',
+              title: 'newChild'
+            }
+          ])
     });
 });
