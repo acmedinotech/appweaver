@@ -124,7 +124,18 @@ export type TypeOfs = '*' | 'string' | 'number' | 'boolean' | 'null' | 'bigint' 
 
 export const getTypeOf = (value: any) => value === null ? 'null' : typeof value;
 
-export type PropMutationMetadata = {
+export type PropertyEncodeDecode = {
+    /**
+     * Context-dependent value transformation. E.g. a Web form field might display a complex object from a JSON string.
+     */
+    decode: (value: any, property: string, modelDef: ModelDefinition) => any;
+    /**
+     * Context-dependent value transformation. E.g. a form handler might convert a complex object to a JSON string.
+     */
+    encode: (value: any, property: string, modelDef: ModelDefinition) => any;
+}
+
+export type PropMutationMetadata = PropertyEncodeDecode & {
     /** If true, the property cannot be modified after creation. ONLY use this on user-supplied fields. */
     isReadOnly?: boolean;
     /** If true and autoCreatedValue set, the property is auto-created by the system at create (conflicts with isRequired/isReadOnly). */
@@ -134,14 +145,6 @@ export type PropMutationMetadata = {
     /** If true, the property is an array. If object, define array constraints. */
     autoCreatedValue?: (propertyKey: string, modelDef: ModelDefinition) => any;
     autoUpdatedValue?: (propertyKey: string, modelDef: ModelDefinition) => any;
-    /**
-     * Context-dependent value transformation. E.g. a Web form field might display a complex object from a JSON string.
-     */
-    decode: (value: any, property: string, modelDef: ModelDefinition) => any;
-    /**
-     * Context-dependent value transformation. E.g. a form handler might convert a complex object to a JSON string.
-     */
-    encode: (value: any, property: string, modelDef: ModelDefinition) => any;
 };
 
 export type PropValidationMetadata = {
@@ -170,7 +173,7 @@ export type PropValidationMetadata = {
     }) & {
         emid?: string;
         /**
-         * List of: `model`, `collection@model`, `model*`, `collection@*`. Invert logic with `!` prefix.
+         * List of: `model`, `collection:model`, `model*`, `collection:*`. Invert logic with `!` prefix.
          * */
         emidConstraints?: string[]
     }
@@ -182,7 +185,7 @@ export type PropValidationMetadata = {
      * If defined, allows function to modify set value before it's stored on entity. Use cases include
      * enforcing a minimally valid value (e.g. array must always have 1 item).
      */
-    setMap?: (value: any, property: string) => any;
+    valueMapper?: (value: any, property: string) => any;
 };
 
 /**

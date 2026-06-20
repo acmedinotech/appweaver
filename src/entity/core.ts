@@ -104,7 +104,7 @@ export const makeValidatingPropertyAccessors = (args: { target: any, emid: strin
  * 
  * @param entity 
  * @param modelDef 
- * @returns Root `propertyName` is `{modelDef.collection}@{modelDef.name}` and `payload` elements are 
+ * @returns Root `propertyName` is `{modelDef.collection}:{modelDef.name}` and `payload` elements are 
  * `{ propertyName: {propertyName} }`
  */
 export const standardEntityValidation = (emid: string, propsMetaMap: Record<string, PropertyMetadata>, entity: any) => {
@@ -197,7 +197,7 @@ export const makeStandardEntityAccessors = (constructorFn: ClassConstructor<any>
  */
 export const makeModelDefinition = (allDecs: ClassDecoratorMap): ModelDefinition => {
     const modelMeta = allDecs.class[EntityDecorators.Model] as ModelMetadata;
-    const emid = `${modelMeta.collection}@${modelMeta.name}`;
+    const emid = `${modelMeta.collection}:${modelMeta.name}`;
     const propsForDecorator = allDecs.properties[EntityDecorators.Property] ?? {};
     const guid = allDecs.guid;
 

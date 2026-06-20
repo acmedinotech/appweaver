@@ -23,7 +23,7 @@ describe('entity/decorators', () => {
             const testModel = asStandardEntity<InstanceType<typeof TestModel>>(new TestModel());
 
             expect(testModel.$id).toBe('_id');
-            expect(testModel.$emid).toBe('test@testModel');
+            expect(testModel.$emid).toBe('test:testModel');
 
             try {
                 testModel.name = undefined;

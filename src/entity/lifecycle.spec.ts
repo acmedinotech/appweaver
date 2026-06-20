@@ -3,8 +3,8 @@ import { Model, Property } from "./decorators";
 import { makeEntityLifecycleManager, PROP_REL_EMID } from "./lifecycle";
 
 const collection = 'lifecycle';
-const childEmid = 'lifecycle@child';
-const rootEmid = 'lifecycle@root';
+const childEmid = 'lifecycle:child';
+const rootEmid = 'lifecycle:root';
 
 @Model({
     collection,
@@ -70,8 +70,8 @@ describe('entity/lifecycle', () => {
 
     const data = {
         title: 'hydrated.root',
-        createdAt: new Date('2026-01-01'),
-        updatedAt: new Date('2026-01-02'),
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-02T00:00:00.000Z'),
         readOnly: 'hydrated.readonly',
         refChild: {
             title: 'hydrated.child',
@@ -122,7 +122,6 @@ describe('entity/lifecycle', () => {
             expect(queue[0].key).toBe('child');
             expect(queue[1].key).toBe('refChild');
             expect(queue[2].key).toBe('embeddedChild');
-
         });
     });
 
@@ -137,33 +136,35 @@ describe('entity/lifecycle', () => {
         entity.embeddedChild.title = 'newChild';
         entity.embeddedChild.id = 'newChild-id';
       
-        const skeleton = lc.dehydrateEntity({ entity });
-        expect(skeleton).toEqual([
-            {
-              _rel_emid: 'lifecycle@root',
-              title: 'hydrated.root',
-              createdAt: new Date('2026-01-01T00:00:00.000Z'),
-              updatedAt: new Date('2026-01-02T00:00:00.000Z'),
-              readOnly: 'hydrated.readonly',
-              refChild: { id: 'child-ref', _rel_emid: 'lifecycle@child' },
-              embeddedChild: {
-                _rel_emid: 'lifecycle@newChild',
-                id: 'newChild-id',
-                title: 'newChild'
-              }
-            },
-            {
-              _rel_emid: 'lifecycle@child',
-              id: 'child-ref',
-              title: 'hydrated.child',
-              child: { id: 'child-iii', _rel_emid: 'lifecycle@child' }
-            },
-            { _rel_emid: 'lifecycle@child', id: 'child-iii', title: 'iii' },
-            {
-              _rel_emid: 'lifecycle@newChild',
-              id: 'newChild-id',
-              title: 'newChild'
-            }
-          ])
+        it('dehydrates entity with expected docs', () => {
+            const skeleton = lc.dehydrateEntity({ entity });
+            expect(skeleton).toEqual([
+                {
+                  _rel_emid: 'lifecycle:root',
+                  title: 'hydrated.root',
+                  createdAt: new Date('2026-01-01T00:00:00.000Z'),
+                  updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+                  readOnly: 'hydrated.readonly',
+                  refChild: { id: 'child-ref', _rel_emid: 'lifecycle:child' },
+                  embeddedChild: {
+                    _rel_emid: 'lifecycle:newChild',
+                    id: 'newChild-id',
+                    title: 'newChild'
+                  }
+                },
+                {
+                  _rel_emid: 'lifecycle:child',
+                  id: 'child-ref',
+                  title: 'hydrated.child',
+                  child: { id: 'child-iii', _rel_emid: 'lifecycle:child' }
+                },
+                { _rel_emid: 'lifecycle:child', id: 'child-iii', title: 'iii' },
+                {
+                  _rel_emid: 'lifecycle:newChild',
+                  id: 'newChild-id',
+                  title: 'newChild'
+                }
+              ])
+        })
     });
 });

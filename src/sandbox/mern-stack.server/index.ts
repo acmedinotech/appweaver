@@ -46,7 +46,7 @@ export class MongoEntityManager implements EntityCollectionManagerInterface {
     modelDefCache: Record<string, ModelDefinition> = {};
 
     getModelDefinition(modelName: string): ModelDefinition {
-        const emid = `${this.collectionName}@${modelName}`;
+        const emid = `${this.collectionName}:${modelName}`;
         if (!this.modelDefCache[emid]) {
             // @ts-ignore
             this.modelDefCache[emid] = getModelDefinitionByGuid(getModelDefinitionGuid(modelName, this.collectionName));
@@ -56,7 +56,7 @@ export class MongoEntityManager implements EntityCollectionManagerInterface {
 
     makeModelInstance<EntityModel = any>(modelName: string, initialData?: Record<string, any>, options?: HydrateOptions): EntityModel {
         return this.getModelDefinition(modelName)?.hydrateEntity(
-            { ...initialData ?? {}, [MongoEntityManager.propEntityModelId]: `${this.collectionName}@${modelName}` },
+            { ...initialData ?? {}, [MongoEntityManager.propEntityModelId]: `${this.collectionName}:${modelName}` },
             options
         );
     }
@@ -64,7 +64,7 @@ export class MongoEntityManager implements EntityCollectionManagerInterface {
     makeEntityPropsFor({ _id, modelName }: { _id?: any, modelName: string }, optionalData: Record<string, any> = {}): Record<string, any> {
         const map: Record<string, any> = {
             ...optionalData,
-            [PROP_ENTITY_MODEL_ID]: `${this.collectionName}@${modelName}`,
+            [PROP_ENTITY_MODEL_ID]: `${this.collectionName}:${modelName}`,
         }
         if (_id) {
             map['_id'] = typeof _id === 'string' ? new ObjectId(_id) : _id;

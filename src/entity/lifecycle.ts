@@ -77,7 +77,7 @@ export const hydrateEntity = ({ entity: _entity, data, options = {} }: Parameter
 
         const value = data[propName];
         if (propDef.relationship) {
-            const { relType, emid: emidDefault } = propDef.relationship;
+            const { emid: emidDefault } = propDef.relationship;
             if (value instanceof Array) {
                 entity[propName] = value.map((subent) => 
                     hydrateEntity(
@@ -101,45 +101,6 @@ export const hydrateEntity = ({ entity: _entity, data, options = {} }: Parameter
     })
 
     return entity;
-}
-
-const defaultIdExtractor: IdExtractorFn = (entity, keys) => {
-    const extractedKeys: Record<string, any> = {};
-    for (const key of keys) {
-        if (entity[key] !== undefined)
-            extractedKeys[key] = entity[key];
-        else
-            extractedKeys[key] = `${VALUE_UNDEFINED_PREFIX}${key}`;
-    }
-    return extractedKeys;
-}
-
-export const dehydrateProperty = (value: any, propDef: PropertyMetadata, _entity: any, { idExtractor = defaultIdExtractor }: DehydrateOptions = {}) => {
-    let normValue = value;
-    if (propDef.relationship) {
-        const { emid: emidDefault, relType, emidConstraints: modelConstraints } = propDef.relationship;
-        if (relType === 'embedded')
-            return normValue; // @todo dehydrate embedded
-
-        const {preservedProps: keys} = propDef.relationship;
-        // @todo handle isArray
-        const relEntity = value;
-        if (typeof relEntity !== 'object')
-            return null;
-
-        // project keys + encType & emid/default
-        const extractedKeys = idExtractor(relEntity, keys, propDef);
-        const emid = relEntity[PROP_REL_EMID] ?? emidDefault;
-        // @todo apply emidConstraints
-
-        normValue = {
-            ...extractedKeys,
-            [PROP_REL_EMID]: emid,
-            // @todo _rel_parent_id
-        };
-    }
-
-    return normValue;
 }
 
 export const extractEmid = (entity: any) => entity.$emid ?? entity[PROP_REL_EMID];

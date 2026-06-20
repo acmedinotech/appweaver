@@ -5,7 +5,7 @@ import { DEFAULT_COLLECTION, EntityDecorators, type ModelMetadata, type Property
 const collectionToGuids: Record<string, string[]> = {};
 const modelToGuid: Record<string, string> = {};
 
-export const getModelDefinitionGuid = (name: string, collection = DEFAULT_COLLECTION) => modelToGuid[`${collection}@${name}`];
+export const getModelDefinitionGuid = (name: string, collection = DEFAULT_COLLECTION) => modelToGuid[`${collection}:${name}`];
 export const getModelGuidByEmid = (emid: string) => modelToGuid[emid];
 export const getModelDefinitionsByCollection = (collection = DEFAULT_COLLECTION) => collectionToGuids[collection] ?? [];
 
@@ -19,7 +19,7 @@ export const Model = (metadata: ModelMetadata) => {
         const meta = { collection: DEFAULT_COLLECTION, ...metadata };
         const { clazz, setEffectiveClass } = registerClassDecorator(EntityDecorators.Model, target, meta);
 
-        const emid = `${meta.collection}@${meta.name}`;
+        const emid = `${meta.collection}:${meta.name}`;
         if (!collectionToGuids[meta.collection]) {
             collectionToGuids[meta.collection] = [];
         }

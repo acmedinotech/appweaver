@@ -34,7 +34,7 @@ describe('entity/services', () => {
 
     })
 
-    const emid = 'testCollection@testModel';
+    const emid = 'testCollection:testModel';
     const baseModelDef = getModelDefinition(new BaseModel()) as ModelDefinition;
     const lcman = makeEntityLifecycleManager(emid);
     
@@ -109,7 +109,7 @@ describe('entity/services', () => {
         }
 
         it('invokes instance validateEntity() (asserts: @Validator() instance method)', () => {
-            const lcman = makeEntityLifecycleManager("testCollection@model.instanceValidator");
+            const lcman = makeEntityLifecycleManager("testCollection:model.instanceValidator");
             try {
                 lcman.hydrateEntity({ data: { name: 'force-error', age: 30 } });
             } catch (validationError: any) {
@@ -124,7 +124,7 @@ describe('entity/services', () => {
         });
 
         it('invokes static validateEntity() (asserts: @Validator() static method)', () => {
-            const lcman = makeEntityLifecycleManager("testCollection@model.staticValidator");
+            const lcman = makeEntityLifecycleManager("testCollection:model.staticValidator");
             try {
                 lcman.hydrateEntity({ data: { name: 'force-error-static', age: 60 } });
                 // throw new Error('expected error for invalid entity');
@@ -139,7 +139,7 @@ describe('entity/services', () => {
         });
 
         describe('#makeStandardEntity()', () => {
-            const lcman = makeEntityLifecycleManager("testCollection@model.instanceValidator");
+            const lcman = makeEntityLifecycleManager("testCollection:model.instanceValidator");
             const entity: ModelWithInstanceValidator & StandardEntity = lcman.hydrateEntity({ data: { name: 'Test', age: 30 } });
             it('validates throw-after-set', () => {
                 try {
@@ -172,7 +172,7 @@ describe('entity/services', () => {
 
         describe('#makeObservableEntity()', () => {
             const modelDef = getModelDefinition(ModelWithInstanceValidator) as ModelDefinition;
-            const lcman = makeEntityLifecycleManager("testCollection@model.instanceValidator");
+            const lcman = makeEntityLifecycleManager("testCollection:model.instanceValidator");
             const entity = makeObservableEntity<ModelWithInstanceValidator>(modelDef, lcman.hydrateEntity({ data: { name: 'Test', age: 30 } }));
             const events: string[] = [];
             

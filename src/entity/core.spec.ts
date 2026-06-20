@@ -303,7 +303,7 @@ describe('entity/core', () => {
             expect(modelDef.modelMetadata.idKey).toBe('__id');
             expect(modelDef.properties.required.name).toBe('required');
             expect(modelDef.properties.required.isRequired).toBe(true);
-            expect(modelDef.getEmid()).toBe('c@mmd');
+            expect(modelDef.getEmid()).toBe('c:mmd');
             expect(typeof modelDef.createInstance).toBe('function');
         });
     });
