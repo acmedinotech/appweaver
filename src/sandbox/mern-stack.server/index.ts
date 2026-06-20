@@ -4,8 +4,7 @@ import { smartContainer } from "../../library";
 import type { EntityCollectionManagerInterface, GetManyResults } from "../../persist/decorators";
 import { CollectionManagerLCRUDController as CollectionManagerAPIController } from "../../persist/services";
 import { getMongodbConfigFromEnvVars, makeMongodbClientWrapper, type MongodbWrapper } from "./mongo";
-import { getModelDefinitionGuid, Model, Property, type HydrateOptions, type ModelDefinition } from "../../entity";
-import { getModelDefinitionByGuid } from "../../entity/lifecycle";
+import { getModelDefinitionGuid, getModelDefinitionByGuid, Model, Property, type HydrateOptions, type ModelDefinition, makeEntityLifecycleManager, type EntityLifecycleManager } from "../../entity";
 
 import * as bundleExpressServer from './express';
 import express, { type NextFunction } from 'express';
@@ -20,7 +19,7 @@ export const PROP_ENTITY_MODEL_ID = '_entityModelId';
 
 export const PROP_SYS_MANAGED_KEYS = ['_entityModelId', '_ownerId'];
 
-const {  Activate, Inject, Service } = smartContainer;
+const { Activate, Inject, Service } = smartContainer;
 
 @Service({
     id: idEntityManager, bundleId, properties: {
@@ -45,20 +44,16 @@ export class MongoEntityManager implements EntityCollectionManagerInterface {
 
     modelDefCache: Record<string, ModelDefinition> = {};
 
-    getModelDefinition(modelName: string): ModelDefinition {
+    getLifecycleManager(modelName: string): EntityLifecycleManager {
         const emid = `${this.collectionName}:${modelName}`;
-        if (!this.modelDefCache[emid]) {
-            // @ts-ignore
-            this.modelDefCache[emid] = getModelDefinitionByGuid(getModelDefinitionGuid(modelName, this.collectionName));
-        }
-        return this.modelDefCache[emid];
+        return makeEntityLifecycleManager(emid);
     }
 
     makeModelInstance<EntityModel = any>(modelName: string, initialData?: Record<string, any>, options?: HydrateOptions): EntityModel {
-        return this.getModelDefinition(modelName)?.hydrateEntity(
-            { ...initialData ?? {}, [MongoEntityManager.propEntityModelId]: `${this.collectionName}:${modelName}` },
+        return this.getLifecycleManager(modelName)?.hydrateEntity({
+            data: { ...initialData ?? {}, [MongoEntityManager.propEntityModelId]: `${this.collectionName}:${modelName}` },
             options
-        );
+        });
     }
 
     makeEntityPropsFor({ _id, modelName }: { _id?: any, modelName: string }, optionalData: Record<string, any> = {}): Record<string, any> {
@@ -81,26 +76,24 @@ export class MongoEntityManager implements EntityCollectionManagerInterface {
     }
 
     async getMany<EntityModel = any, Filter = Record<string, any>>(modelName: string, filter: Filter): Promise<GetManyResults<EntityModel>> {
-        const modelDef = this.getModelDefinition(modelName);
+        const modelDef = this.getLifecycleManager(modelName);
         const entities = await this.mongo.mapDocsFrom({
             collection: this.collectionName,
             withFilter: this.makeEntityPropsFor({ modelName }, filter ?? {}),
             afterFind: (cursor, docs) => {
                 // console.log('🟢 getMany.afterFind // cursor', cursor, ' // ', docs);
             },
-            mapTo: (doc) => modelDef.hydrateEntity(doc as Record<string, any>),
+            mapTo: (doc) => modelDef.hydrateEntity({data: doc as Record<string, any>}),
         })
 
         return { items: entities as EntityModel[], modelName };
     }
 
     async create<EntityModel = any>(modelName: string, userData: any, withProps: Record<string, any> = {}): Promise<EntityModel> {
-        const modelDef = this.getModelDefinition(modelName);
-        const { data } = modelDef.prepareData('create', userData, {
-            injectData: this.makeEntityPropsFor({ modelName }, withProps),
-        })
+        const modelDef = this.getLifecycleManager(modelName);
+        const { data } = modelDef.prepareData({mode: 'create', userData, appData: this.makeEntityPropsFor({ modelName }, withProps)})
 
-        const entity = modelDef.hydrateEntity<EntityModel>(data);
+        const entity = modelDef.hydrateEntity<EntityModel>({data});
         entity.$assertValidEntity();
         const result = await this.mongo.insertOne({
             collection: this.collectionName,
@@ -111,17 +104,15 @@ export class MongoEntityManager implements EntityCollectionManagerInterface {
     }
 
     async update<EntityModel = any>(modelName: string, userData: any, withConstraints: any = {}): Promise<EntityModel> {
-        const modelDef = this.getModelDefinition(modelName);
+        const modelDef = this.getLifecycleManager(modelName);
 
         const canonical = await this.getOne(modelName, withConstraints._id, withConstraints);
         if (!canonical) {
-            throw new AppWeaverError(`Could not find ${modelName} (#${withConstraints._id})`, 'mern-stack.mongo.update', {modelName, withConstraints});
+            throw new AppWeaverError(`Could not find ${modelName} (#${withConstraints._id})`, 'mern-stack.mongo.update', { modelName, withConstraints });
         }
 
         const entity = modelDef.hydrateEntity<EntityModel>(canonical);
-        const { data, removed } = modelDef.prepareData('update', userData, {
-            removeKeys: PROP_SYS_MANAGED_KEYS,
-        });
+        const { data, removed } = modelDef.prepareData({mode: 'update', userData});
 
         Object.assign(entity, data);
         entity.$assertValidEntity();
