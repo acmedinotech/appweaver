@@ -27,9 +27,9 @@ export default {
       plugins: [minify()],
     },
     {
-      file: "dist/appstitch.umd.min.js",
+      file: "dist/appweaver.umd.min.js",
       format: "umd",
-      name: "AppStitch",
+      name: "AppWeaver",
       sourcemap: true,
       plugins: [minify()],
     },

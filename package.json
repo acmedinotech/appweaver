@@ -1,7 +1,7 @@
 {
   "name": "@acmedinotech/appweaver",
   "version": "0.0.1-alpha",
-  "description": "AppStich is an application orchestration framework powered by decorators. It allows modular, auto-wired application composition. Inspired by Apache Felix & the OSGi framework spec.",
+  "description": "AppWeaver is an application orchestration framework powered by decorators. It allows modular, auto-wired application composition. Inspired by Apache Felix & the OSGi framework spec.",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
@@ -13,7 +13,8 @@
       "import": "./dist/index.mjs",
       "require": "./dist/index.cjs",
       "default": "./dist/index.mjs"
-    }
+    },
+    "./index.mjs": "./dist/index.mjs"
   },
   "sideEffects": false,
   "scripts": {
