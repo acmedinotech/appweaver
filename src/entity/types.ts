@@ -104,7 +104,10 @@ export interface EntityLifecycleManager {
 export interface StandardEntity {
     $id: string | undefined;
     $emid: string;
+    $__parent?: [any, string, number?];
     $assertValidEntity: () => void;
+    // $observeWith: (observer: PropertyObserverFn, onProperties?: string | string[]) => () => void;
+    // $changedFrom: (descendant)
 }
 
 export const asStandardEntity = <Ent extends object>(entity: any) => entity as Ent & StandardEntity;
@@ -112,6 +115,30 @@ export const asStandardEntity = <Ent extends object>(entity: any) => entity as E
 export const isStandardEntity = (entity: any): entity is StandardEntity => {
     return entity && typeof entity.$id === 'string' && typeof entity.$emid === 'string' && typeof entity.$assertValidEntity === 'function';
 }
+
+export type PropertyObserverFn = (params: { property: string, value: any; meta?: {error?: any; eventKey?: string} }) => void;
+
+export interface ObservableEntity {
+    /**
+     * @param observer 
+     * @param onProperties If undefined or `*`, observe all properties. Otherwise, observe explicit key(s).
+     * @returns Unsubscribe function.
+     */
+    $observeWith: (observer: PropertyObserverFn, onProperties?: string | string[]) => () => void;
+    /**
+     * Triggers the following event topics on a given property:
+     * 
+     * - $name[$index]/$subProp
+     * - $name[*]/$subProp
+     * - $name/$subProp
+     * - $name/*
+     * - $name
+     */
+    $_notifyChanges: (params: {name: string; index?: number; subProp: string, value: any}) => void;
+}
+
+export const asObservableEntity = <Ent extends object>(entity: any) => entity as Ent & ObservableEntity;
+
 
 /**
  * @param entity If undefined, convention dictates that `this` is the entity
@@ -185,7 +212,7 @@ export type PropValidationMetadata = {
      * If defined, allows function to modify set value before it's stored on entity. Use cases include
      * enforcing a minimally valid value (e.g. array must always have 1 item).
      */
-    valueMapper?: (value: any, property: string) => any;
+    transformValueOnSet?: (value: any, property: string) => any;
 };
 
 /**
@@ -210,16 +237,3 @@ export type DehydrateOptions = {
     depth?: number;
     preserveKeys?: string[];
 }
-
-export interface ObservableEntity {
-    /**
-     * @param observer 
-     * @param onProperties If undefined or `*`, observe all properties. Otherwise, observe explicit key(s).
-     * @returns Unsubscribe function.
-     */
-    $observeWith: (observer: PropertyObserverFn, onProperties?: string | string[]) => () => void;
-}
-
-export const asObservableEntity = <Ent extends object>(entity: any) => entity as Ent & ObservableEntity;
-
-export type PropertyObserverFn = (params: { property: string, value: any; error?: any }) => void;

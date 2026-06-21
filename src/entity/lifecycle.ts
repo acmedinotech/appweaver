@@ -85,14 +85,16 @@ export const hydrateEntity = ({ entity: _entity, data, options = {} }: Parameter
                         getModelDefinitionByEmid(subent[PROP_REL_EMID] ?? emidDefault)
                     ) ?? subent
                 ).forEach((subent, idx) => {
+                    subent.$__parent = [entity, propName, idx];
                     options.queueEntityFetch?.({entity: subent, parent: entity, key: propName, ord: idx});
                 });
-
             } else {
-                entity[propName] = hydrateEntity(
+                const subent = hydrateEntity(
                     {data: value, options},
                     getModelDefinitionByEmid(value[PROP_REL_EMID])
                 ) ?? value;
+                subent.$__parent = [entity, propName];
+                entity[propName] = subent;
                 options.queueEntityFetch?.({entity: entity[propName], parent: entity, key: propName});
             }
         } else {

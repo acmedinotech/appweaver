@@ -14,7 +14,7 @@
       "require": "./dist/index.cjs",
       "default": "./dist/index.mjs"
     },
-    "./index.mjs": "./dist/index.mjs"
+  "./index.mjs": "./dist/index.mjs"
   },
   "sideEffects": false,
   "scripts": {
