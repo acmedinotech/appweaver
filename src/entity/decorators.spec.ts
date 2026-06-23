@@ -38,7 +38,6 @@ describe('entity/decorators', () => {
                 testModel.$assertValidEntity();
                 throw new Error('expected error for invalid entity');
             } catch (error: any) {
-                // console.log('error', error);
                 expect(error).toBeInstanceOf(EntityValidationError);
                 expect(error.message).toBe('force-error detected');
             }

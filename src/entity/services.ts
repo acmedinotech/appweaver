@@ -10,10 +10,10 @@ export const makeObservableEntity = <Entity extends object>(modelDef: ModelDefin
         [ ...(observers[key as string] ?? []), ...(observers['*'] ?? []) ].forEach(
             (observer, idx) => {
                 try {
-                    observer({property: key, value});
+                    observer({propName: key, value});
                 } catch (error) {
                     console.error('🟠 observableEntity.error.observer', { error, observer, observerIndex: idx, key, value });
-                    observer({property: key, value, error});
+                    observer({propName: key, value, error});
                 }
             }
         );

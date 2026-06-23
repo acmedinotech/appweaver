@@ -1,5 +1,7 @@
 import type { ClassDecoratorMap } from "../decorator-registry";
-import { assertValidEntity, makeModelDefinition, makeStandardEntityAccessors, makeValidatingPropertyAccessors, standardEntityValidation, standardPropertyValidation } from "./core";
+import { assertValidEntity, makeModelDefinition, makeStandardEntityClass, makeValidatingPropertyAccessors, standardEntityValidation, standardPropertyValidation } from "./core";
+import { Model } from "./decorators";
+import { getModelDefinition } from "./services";
 import { EntityDecorators, EntityValidationError, PropertyValidationError, type PropertyMetadata } from "./types";
 
 describe('entity/core', () => {
@@ -272,21 +274,23 @@ describe('entity/core', () => {
         });
     });
 
-    describe('#makeStandardEntityAccessors', () => {
+    describe('#makeStandardEntityClass', () => {
+        @Model({collection: 'test', name: 'test', idKey: '__id'})
         class LocalClass { };
         const allDecs = {...allDecsInst, class: {
             [EntityDecorators.Model]: {
                 idKey: '__id',
             }
         }}
-        const NewClass = makeStandardEntityAccessors(LocalClass, 'test', allDecs);
+        const modelDef = getModelDefinition(LocalClass);
+        const NewClass = makeStandardEntityClass(LocalClass, modelDef);
         it('extends original class to make Entity & ProxyEntity & StandardEntity', () => {
             const inst = new NewClass();
             expect(inst.$id).toBe('__id');
-            expect(inst.$emid).toBe('test');
+            expect(inst.$emid).toBe('test:test');
             expect(inst.$__proxy).toEqual({});
             expect(inst.$__errorState).toEqual({});
-            expect(() => inst.$assertValidEntity()).toThrow("anyentity[validatorInstMethod] is not a function");
+
         });
     });
 

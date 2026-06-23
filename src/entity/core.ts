@@ -1,5 +1,5 @@
 import { getClassForGuid, getGuid, type ClassConstructor, type ClassDecoratorMap } from "../decorator-registry";
-import { EntityDecorators, EntityValidationError, getTypeOf, PropertyValidationError, type ModelDefinition, type ModelMetadata, type PropertyMetadata } from "./types";
+import { EntityDecorators, EntityValidationError, getTypeOf, PropertyValidationError, type ModelDefinition, type ModelMetadata, type ObservableEntity, type PropertyMetadata, type PropertyObserverFn, type StandardEntity } from "./types";
 
 const getListDifferences = (list1: any[], list2: any[]) => {
     return new Set(list1).difference(new Set(list2));
@@ -9,7 +9,7 @@ const getListDifferences = (list1: any[], list2: any[]) => {
  * Applies @Property validation to specifications.
  */
 export const standardPropertyValidation = (value: any, propertyName: string, propMeta: Partial<PropertyMetadata>, emid: string) => {
-    const { isRequired, isTypeOf, isArray, fixedValues } = propMeta;
+    const { isRequired, isTypeOf, isArray, fixedValues } = propMeta ?? {};
     let errors: string[] = [];
     const errProperties: Record<string, string> = {};
     const _valType = getTypeOf(value);
@@ -68,7 +68,7 @@ export const standardPropertyValidation = (value: any, propertyName: string, pro
         });
     }
 
-    return propMeta.validate?.(value, propertyName);
+    return propMeta?.validate?.(value, propertyName);
 }
 
 /**
@@ -144,7 +144,6 @@ export const assertValidEntity = (entity: ProxyEntity, emid: string, allDecs: Cl
     const anyentity = entity as any;
     let error: any;
     if (validatorInstMethod) {
-        console.log('invoking instance validator', validatorInstMethod, ' >>>>', anyentity);
         error = anyentity[validatorInstMethod]();
     } else if (validatorStaticMethod) {
         error = anyentity.constructor[validatorStaticMethod](entity);
@@ -158,37 +157,155 @@ export const assertValidEntity = (entity: ProxyEntity, emid: string, allDecs: Cl
     if (error) throw error;
 }
 
-export const makeStandardEntityAccessors = (constructorFn: ClassConstructor<any>, emid: string, allDecs: ClassDecoratorMap) => {
-    const meta = allDecs.class[EntityDecorators.Model];
+// export const makeStandardEntityAccessors = (constructorFn: ClassConstructor<any>, emid: string, allDecs: ClassDecoratorMap) => {
+//     const meta = allDecs.class[EntityDecorators.Model];
+//     const idKey = meta.idKey ?? 'id';
+
+//     const newClass = class extends constructorFn {
+//         $__proxy: Record<string, any> = {};
+//         $__errorState: Record<string, any> = {};
+
+//         constructor(...args: any[]) {
+//             super(...args);
+//             makeValidatingPropertyAccessors({
+//                 target: this,
+//                 emid,
+//                 propsMetaMap: (allDecs.properties[EntityDecorators.Property] ?? {}) as Record<string, PropertyMetadata>,
+//             })
+//         }
+
+//         get $id() {
+//             return idKey;
+//         }
+
+//         get $emid() {
+//             return emid;
+//         }
+
+//         $assertValidEntity() {
+//             assertValidEntity(this, emid, allDecs);
+//         }
+//     };
+
+//     return newClass;
+// }
+
+/**
+ * Defines setters for defined @Property that:
+ * 
+ * 1. validate value
+ * 2. invoke on-change event for key
+ * 3. throw error if not valid
+ */
+export const bindStandardEntityAccessors = (args: { target: StandardEntity&ObservableEntity, emid: string, propsMetaMap: Record<string, PropertyMetadata> }) => {
+    const { target, propsMetaMap } = args;
+    for (const propName of Object.keys(propsMetaMap)) {
+        if (Object.hasOwn(target, propName)) {
+            delete target[propName as keyof typeof target];
+        }
+
+        Object.defineProperty(target, propName, {
+            enumerable: true,
+            set(value) {
+                this.$__set(propName, value);
+            },
+            get() { return this.$__proxy[propName]; },
+        });
+    }
+    return target;
+}
+
+export const makeStandardEntityClass = (constructorFn: ClassConstructor<any>, modelDef: ModelDefinition) => {
+    const emid = modelDef.getEmid();
+    const meta = modelDef.modelMetadata;
     const idKey = meta.idKey ?? 'id';
 
-    const newClass = class extends constructorFn {
+    const appweaver_standardEntity = class extends constructorFn implements StandardEntity, ObservableEntity {
         $__proxy: Record<string, any> = {};
         $__errorState: Record<string, any> = {};
+        $__observers: Record<string, PropertyObserverFn[]> = {};
+
+        readonly $id = idKey ?? '';
+        readonly $emid = emid;
 
         constructor(...args: any[]) {
             super(...args);
-            makeValidatingPropertyAccessors({
+            bindStandardEntityAccessors({
                 target: this,
                 emid,
-                propsMetaMap: (allDecs.properties[EntityDecorators.Property] ?? {}) as Record<string, PropertyMetadata>,
+                propsMetaMap: modelDef.properties,
             })
         }
 
-        get $id() {
-            return idKey;
-        }
-
-        get $emid() {
-            return emid;
-        }
-
         $assertValidEntity() {
-            assertValidEntity(this, emid, allDecs);
+            assertValidEntity(this, emid, modelDef.getDecoratorMap());
+        }
+
+        $observeWith(observer: PropertyObserverFn, onProperties?: string | string[]) {
+            const keys = (onProperties === '*' || onProperties === undefined)
+                ? ['*']
+                : (Array.isArray(onProperties) ? onProperties : [onProperties]);
+            for (const key of keys) {
+                if (!this.$__observers[key]) this.$__observers[key] = [];
+                this.$__observers[key].push(observer);
+            }
+
+            return () => {
+                for (const key of keys) {
+                    this.$__observers[key] = this.$__observers[key].filter(o => o !== observer);
+                }
+            }
+        }
+
+        $_notifyChanges({name, value, error, index = -1, subProp}: { name: string; value: any; error?: any; index?: number; subProp?: string }) {
+            const topicParts: string[] = [name];
+            if (index >= 0) topicParts.push(`${index}`);
+            if (subProp) topicParts.push(`${subProp}`);
+
+            const eventScope = topicParts.join('/');
+            const topics: string[] = [];
+            let curScope = eventScope;
+            while (curScope) {
+                topics.push(curScope);
+                topicParts.pop();
+                curScope = topicParts.join('/');
+            }
+            topics.push('*');
+
+            this.$__dispatch(topics, {name, value, error, index, subProp, eventScope});
+        }
+
+        $__dispatch(topics: string[], {name, value, error, index = -1, subProp, eventScope}: {name: string; value: any; error?: any; index?: number; subProp?: string; eventScope: string}) {
+            topics.forEach(topic => {
+                this.$__observers[topic]?.forEach(observer => {
+                    try {
+                        observer({ propName: name, value, error, eventScope });
+                    } catch (error) {
+                        console.warn(`${emid}.$_notifyChanges observer error`, {name, index, subProp, value, error});
+                    }
+                });
+            });
+
+            if (this.$__parent) {
+                const [parent, key, index] = this.$__parent;
+                parent.$_notifyChanges({ name: key, value, index, subProp: eventScope });
+            }
+        }
+
+        $__set(propName: string, value: any) {
+            this.$__proxy[propName] = value;
+            const error = standardPropertyValidation(value, propName, modelDef.properties[propName], emid);
+            this.$_notifyChanges({ name: propName, value, error });
+            if (error) {
+                this.$__errorState[propName] = error.toJson();
+                throw error;
+            } else {
+                delete this.$__errorState[propName];
+            }
         }
     };
 
-    return newClass;
+    return appweaver_standardEntity;
 }
 
 /**
@@ -219,6 +336,7 @@ export const makeModelDefinition = (allDecs: ClassDecoratorMap): ModelDefinition
         properties,
         getEmid: () => emid,
         createInstance: () => new (getClassForGuid(guid))(),
+        getDecoratorMap: () => allDecs,
     }
 
     return modelDef;

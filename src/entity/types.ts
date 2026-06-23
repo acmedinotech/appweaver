@@ -1,4 +1,5 @@
 import { AppWeaverError } from "../constants";
+import type { ClassDecoratorMap } from "../decorator-registry";
 
 export class PropertyValidationError extends AppWeaverError {
     static readonly errorType = 'entity.property.validation-error';
@@ -73,6 +74,7 @@ export interface ModelDefinition {
     properties: Record<string, PropertyMetadata>;
     getEmid: () => string;
     createInstance: () => any;
+    getDecoratorMap: () => ClassDecoratorMap;
 }
 
 /**
@@ -116,7 +118,8 @@ export const isStandardEntity = (entity: any): entity is StandardEntity => {
     return entity && typeof entity.$id === 'string' && typeof entity.$emid === 'string' && typeof entity.$assertValidEntity === 'function';
 }
 
-export type PropertyObserverFn = (params: { property: string, value: any; meta?: {error?: any; eventKey?: string} }) => void;
+        // !Object.hasOwn(target, propName) &&
+export type PropertyObserverFn = (params: { propName: string, value: any; eventScope?: string; error?: any; }) => void;
 
 export interface ObservableEntity {
     /**

@@ -1,5 +1,5 @@
 import { getClassDecoratorMap, getGuid, registerClassDecorator, registerMethodDecorator, registerPropertyDecorator, type ClassConstructor } from "../decorator-registry";
-import { makeStandardEntityAccessors } from "./core";
+import { makeModelDefinition, makeStandardEntityClass } from "./core";
 import { DEFAULT_COLLECTION, EntityDecorators, type ModelMetadata, type PropertyMetadata } from "./types";
 
 const collectionToGuids: Record<string, string[]> = {};
@@ -29,12 +29,9 @@ export const Model = (metadata: ModelMetadata) => {
         modelToGuid[emid] = guid;
 
         const allDecs = getClassDecoratorMap(guid);
-        const proxy: Record<string, any> = { ...(target as any) };
-        delete proxy.prototype;
+        const modelDef = makeModelDefinition(allDecs);
 
-        const errorState: Record<string, any> = {};
-
-        const newClass = makeStandardEntityAccessors(target, emid, allDecs);
+        const newClass = makeStandardEntityClass(target, modelDef);
         setEffectiveClass(newClass);
         return newClass as T;
     };
