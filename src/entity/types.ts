@@ -112,7 +112,7 @@ export interface StandardEntity {
     // $changedFrom: (descendant)
 }
 
-export const asStandardEntity = <Ent extends object>(entity: any) => entity as Ent & StandardEntity;
+export const asStandardEntity = <Ent extends object>(entity: any) => entity as Ent & StandardEntity & ObservableEntity;
 
 export const isStandardEntity = (entity: any): entity is StandardEntity => {
     return entity && typeof entity.$id === 'string' && typeof entity.$emid === 'string' && typeof entity.$assertValidEntity === 'function';
@@ -166,6 +166,7 @@ export type PropertyEncodeDecode = {
 }
 
 export type PropMutationMetadata = PropertyEncodeDecode & {
+    defaultValue?: () => any;
     /** If true, the property cannot be modified after creation. ONLY use this on user-supplied fields. */
     isReadOnly?: boolean;
     /** If true and autoCreatedValue set, the property is auto-created by the system at create (conflicts with isRequired/isReadOnly). */

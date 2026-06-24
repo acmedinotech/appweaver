@@ -220,6 +220,7 @@ export const makeStandardEntityClass = (constructorFn: ClassConstructor<any>, mo
     const meta = modelDef.modelMetadata;
     const idKey = meta.idKey ?? 'id';
 
+    // @todo set iterator and filter out $__ props
     const appweaver_standardEntity = class extends constructorFn implements StandardEntity, ObservableEntity {
         $__proxy: Record<string, any> = {};
         $__errorState: Record<string, any> = {};
@@ -230,11 +231,19 @@ export const makeStandardEntityClass = (constructorFn: ClassConstructor<any>, mo
 
         constructor(...args: any[]) {
             super(...args);
+            for (const propName in modelDef.properties) {
+                this.$__proxy[propName] = this[propName];
+            }
             bindStandardEntityAccessors({
                 target: this,
                 emid,
                 propsMetaMap: modelDef.properties,
             })
+            Object.assign(this, this.$__proxy);
+        }
+
+        toJSON() {
+            return {...this.$__proxy}
         }
 
         $assertValidEntity() {
@@ -295,6 +304,17 @@ export const makeStandardEntityClass = (constructorFn: ClassConstructor<any>, mo
         $__set(propName: string, value: any) {
             this.$__proxy[propName] = value;
             const error = standardPropertyValidation(value, propName, modelDef.properties[propName], emid);
+
+            if (!error && modelDef.properties[propName].relationship) {
+                if (value instanceof Array) {
+                    value.forEach((subent, idx) => {
+                        subent.$__parent = [this, propName, idx];
+                    });
+                } else {
+                    value.$__parent = [this, propName];
+                }
+            }
+            
             this.$_notifyChanges({ name: propName, value, error });
             if (error) {
                 this.$__errorState[propName] = error.toJson();
