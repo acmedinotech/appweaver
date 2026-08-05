@@ -3,52 +3,6 @@ import { makeModelDefinition } from "./core";
 import { getModelGuidByEmid } from "./decorators";
 import { EntityDecorators, type ModelDefinition, type ObservableEntity, type PropertyObserverFn } from "./types";
 
-export const makeObservableEntity = <Entity extends object>(modelDef: ModelDefinition, entity: Entity): Entity & ObservableEntity => {
-    const observers: Record<string, PropertyObserverFn[]> = {};
-
-    const notifyObservers = (key: string, value: any) => {
-        [ ...(observers[key as string] ?? []), ...(observers['*'] ?? []) ].forEach(
-            (observer, idx) => {
-                try {
-                    observer({propName: key, value});
-                } catch (error) {
-                    console.error('🟠 observableEntity.error.observer', { error, observer, observerIndex: idx, key, value });
-                    observer({propName: key, value, error});
-                }
-            }
-        );
-    }
-
-    const proxy = new Proxy(entity, {
-        set: (target, prop, value) => {
-            const key = prop as string;
-            target[key as keyof typeof target] = value;
-
-            if (modelDef.properties[key]) {
-                notifyObservers(key, value);
-            }
-
-            return true;
-        }
-    }) as typeof entity & ObservableEntity;
-
-    proxy.$observeWith = (observer, onProperties) => {
-        const keys = (onProperties === '*' || onProperties === undefined) ? ['*'] : (Array.isArray(onProperties) ? onProperties : [onProperties]);
-        for (const key of keys) {
-            if (!observers[key]) observers[key] = [];
-            observers[key].push(observer);
-        }
-
-        return () => {
-            for (const key of keys) {
-                observers[key] = observers[key].filter(o => o !== observer);
-            }
-        };
-    }
-
-    return proxy;
-}
-
 const modelDefCache: Record<string, ModelDefinition> = {};
 
 /**

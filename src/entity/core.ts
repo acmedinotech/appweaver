@@ -157,39 +157,6 @@ export const assertValidEntity = (entity: ProxyEntity, emid: string, allDecs: Cl
     if (error) throw error;
 }
 
-// export const makeStandardEntityAccessors = (constructorFn: ClassConstructor<any>, emid: string, allDecs: ClassDecoratorMap) => {
-//     const meta = allDecs.class[EntityDecorators.Model];
-//     const idKey = meta.idKey ?? 'id';
-
-//     const newClass = class extends constructorFn {
-//         $__proxy: Record<string, any> = {};
-//         $__errorState: Record<string, any> = {};
-
-//         constructor(...args: any[]) {
-//             super(...args);
-//             makeValidatingPropertyAccessors({
-//                 target: this,
-//                 emid,
-//                 propsMetaMap: (allDecs.properties[EntityDecorators.Property] ?? {}) as Record<string, PropertyMetadata>,
-//             })
-//         }
-
-//         get $id() {
-//             return idKey;
-//         }
-
-//         get $emid() {
-//             return emid;
-//         }
-
-//         $assertValidEntity() {
-//             assertValidEntity(this, emid, allDecs);
-//         }
-//     };
-
-//     return newClass;
-// }
-
 /**
  * Defines setters for defined @Property that:
  * 
@@ -239,7 +206,7 @@ export const makeStandardEntityClass = (constructorFn: ClassConstructor<any>, mo
                 emid,
                 propsMetaMap: modelDef.properties,
             })
-            Object.assign(this, this.$__proxy);
+            // Object.assign(this, this.$__proxy);
         }
 
         toJSON() {
@@ -304,13 +271,12 @@ export const makeStandardEntityClass = (constructorFn: ClassConstructor<any>, mo
         $__set(propName: string, value: any) {
             this.$__proxy[propName] = value;
             const error = standardPropertyValidation(value, propName, modelDef.properties[propName], emid);
-
-            if (!error && modelDef.properties[propName].relationship) {
+            if (!error && modelDef.properties[propName]?.relationship) {
                 if (value instanceof Array) {
                     value.forEach((subent, idx) => {
                         subent.$__parent = [this, propName, idx];
                     });
-                } else {
+                } else if (Boolean(value)) {
                     value.$__parent = [this, propName];
                 }
             }

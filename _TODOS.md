@@ -1,0 +1,6 @@
+- [ ] entity.hydration: link child to parent (including error cascading)
+- [ ] entity.validation: implement @Property.transformValueOnSet
+- [ ] utils
+    - [ ] general: make chainValueTransformers (func with members push & pop)
+    - [ ] general: set of auto-make-value functions (new date, new uuid, new clientTempUuid, etc)
+    - [ ] array: make state-friendly mutation functions (slice, makeApplyRangeConstraints({min?,max?}))
